@@ -1,0 +1,2 @@
+export(save_plot)
+importFrom(ggplot2,ggsave)

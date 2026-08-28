@@ -1,0 +1,12 @@
+Package: rventures
+Title: Convenience Functions for RStudio Projects
+Version: 0.0.0.9000
+Authors@R: person("Miles", "Roberts", role = c("aut", "cre"))
+Description: A collection of convenience functions for use across RStudio
+    projects.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Imports:
+    ggplot2
