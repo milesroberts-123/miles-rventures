@@ -53,8 +53,10 @@ lm_sim <- function(n, a, b) {
 #' )
 multicol_sim <- function(n, mu1, mu2, b0, b1, b2, covmat) {
 
-  # Generate 1,000 random samples
-  bivariate_data <- MASS::mvrnorm(n = n, mu = c(mu1, mu2), Sigma = covmat)
+  # Generate n random samples from a bivariate normal with covariance covmat
+  L <- chol(covmat)
+  z <- matrix(stats::rnorm(n * 2), nrow = n, ncol = 2)
+  bivariate_data <- sweep(z %*% L, 2, c(mu1, mu2), "+")
 
   # Convert to a data frame for easier use
   df <- as.data.frame(bivariate_data)
