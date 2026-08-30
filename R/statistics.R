@@ -143,26 +143,16 @@ multicol_sim <- function(n, mu1, mu2, b0, b1, b2, covmat) {
   epsilon <- stats::rnorm(n)
   df$Y <- b0 + b1 * df$X1 + b2 * df$X2 + epsilon
 
-  # estimate parameters
-  modf <- data.frame(
-    term = names(stats::coefficients(stats::lm(Y ~ X2 + X1, data = df))),
-    value = unname(stats::coefficients(stats::lm(Y ~ X2 + X1, data = df)))
+  # Stack coefficient estimates from the joint model and each single-predictor
+  # model into one data frame
+  coef_table <- function(formula, type) {
+    coefs <- stats::coefficients(stats::lm(formula, data = df))
+    data.frame(term = names(coefs), value = unname(coefs), type = type)
+  }
+
+  rbind(
+    coef_table(Y ~ X2 + X1, "joint"),
+    coef_table(Y ~ X1, "single"),
+    coef_table(Y ~ X2, "single")
   )
-  modf$type <- "joint"
-
-  mod1 <- data.frame(
-    term = names(stats::coefficients(stats::lm(Y ~ X1, data = df))),
-    value = unname(stats::coefficients(stats::lm(Y ~ X1, data = df)))
-  )
-  mod1$type <- "single"
-
-  mod2 <- data.frame(
-    term = names(stats::coefficients(stats::lm(Y ~ X2, data = df))),
-    value = unname(stats::coefficients(stats::lm(Y ~ X2, data = df)))
-  )
-  mod2$type <- "single"
-
-  all_mod <- rbind(modf, mod1, mod2)
-
-  return(all_mod)
 }

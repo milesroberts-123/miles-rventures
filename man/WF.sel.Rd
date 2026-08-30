@@ -2,7 +2,7 @@
 % Please edit documentation in R/popgen.R
 \name{WF.sel}
 \alias{WF.sel}
-\title{Allele frequency trajectory over time: apply selection, then drift comes from rbinom}
+\title{Deprecated: Wright-Fisher simulation under selection}
 \usage{
 WF.sel(N, q, h, s, G)
 }
@@ -20,15 +20,9 @@ coefficient applied in each generation.}
 \item{G}{Number of generations to simulate.}
 }
 \value{
-A numeric vector of length \code{G} with the frequency of allele A in
-each generation.
+See \code{\link[=WF_sel]{WF_sel()}}.
 }
 \description{
-Simulates a Wright-Fisher trajectory of a biallelic locus under selection
-and genetic drift. Each generation, the deterministic allele frequency
-after selection is computed with \code{\link[=fitfreq]{fitfreq()}}, then the number of A alleles
-in the next generation is drawn from a binomial distribution.
+\code{\link[=WF.sel]{WF.sel()}} is deprecated; use \code{\link[=WF_sel]{WF_sel()}} instead. Behaves identically.
 }
-\examples{
-WF.sel(N = 100, q = 0.1, h = 0.5, s = 0.01, G = 50)
-}
+\keyword{internal}

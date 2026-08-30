@@ -39,8 +39,8 @@ fitfreq <- function(q, h, s) {
 #' @export
 #'
 #' @examples
-#' WF.sel(N = 100, q = 0.1, h = 0.5, s = 0.01, G = 50)
-WF.sel <- function(N, q, h, s, G) {
+#' WF_sel(N = 100, q = 0.1, h = 0.5, s = 0.01, G = 50)
+WF_sel <- function(N, q, h, s, G) {
   if (length(s) == 1) {
     s <- rep(s, G - 1)
   } else if (length(s) != G - 1) {
@@ -53,4 +53,18 @@ WF.sel <- function(N, q, h, s, G) {
     counts[i] <- stats::rbinom(1, N, fitfreq(counts[i - 1] / N, h, s[i - 1]))
   }
   counts / N
+}
+
+#' Deprecated: Wright-Fisher simulation under selection
+#'
+#' [WF.sel()] is deprecated; use [WF_sel()] instead. Behaves identically.
+#'
+#' @inheritParams WF_sel
+#'
+#' @return See [WF_sel()].
+#' @export
+#' @keywords internal
+WF.sel <- function(N, q, h, s, G) {
+  warning("WF.sel() is deprecated; use WF_sel() instead.", call. = FALSE)
+  WF_sel(N = N, q = q, h = h, s = s, G = G)
 }

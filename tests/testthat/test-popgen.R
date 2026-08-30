@@ -8,26 +8,37 @@ test_that("fitfreq returns a value in [0, 1]", {
   expect_true(out >= 0 && out <= 1)
 })
 
-test_that("WF.sel returns a length-G vector of frequencies", {
-  out <- WF.sel(N = 100, q = 0.1, h = 0.5, s = 0.01, G = 50)
+test_that("WF_sel returns a length-G vector of frequencies", {
+  out <- WF_sel(N = 100, q = 0.1, h = 0.5, s = 0.01, G = 50)
   expect_length(out, 50)
   expect_true(all(out >= 0 & out <= 1))
 })
 
-test_that("WF.sel recycles a scalar s", {
-  out <- WF.sel(N = 100, q = 0.1, h = 0.5, s = 0.01, G = 10)
+test_that("WF_sel recycles a scalar s", {
+  out <- WF_sel(N = 100, q = 0.1, h = 0.5, s = 0.01, G = 10)
   expect_length(out, 10)
 })
 
-test_that("WF.sel accepts a vector s of length G - 1", {
+test_that("WF_sel accepts a vector s of length G - 1", {
   s <- rep(0.01, 9)
-  out <- WF.sel(N = 100, q = 0.1, h = 0.5, s = s, G = 10)
+  out <- WF_sel(N = 100, q = 0.1, h = 0.5, s = s, G = 10)
   expect_length(out, 10)
 })
 
-test_that("WF.sel errors on wrong-length s", {
+test_that("WF_sel errors on wrong-length s", {
   expect_error(
-    WF.sel(N = 100, q = 0.1, h = 0.5, s = c(0.01, 0.02), G = 10),
+    WF_sel(N = 100, q = 0.1, h = 0.5, s = c(0.01, 0.02), G = 10),
     "scalar or a vector of length G - 1"
   )
+})
+
+test_that("WF.sel alias warns and delegates to WF_sel", {
+  set.seed(42)
+  expected <- WF_sel(N = 100, q = 0.1, h = 0.5, s = 0.01, G = 10)
+  set.seed(42)
+  expect_warning(
+    out <- WF.sel(N = 100, q = 0.1, h = 0.5, s = 0.01, G = 10),
+    "deprecated"
+  )
+  expect_identical(out, expected)
 })

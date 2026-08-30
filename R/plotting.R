@@ -15,38 +15,27 @@
 #' @return Invisibly, the path to the saved PDF.
 #'
 #' @export
-#' @importFrom ggplot2 ggsave
 save_plot <- function(plot_obj, plot_name, date, plot_base_dir, height, width) {
   plot_full_name <- file.path(plot_base_dir, "by-date", date, plot_name)
+  pdf_path <- paste0(plot_full_name, ".pdf")
+  png_path <- paste0(plot_full_name, ".png")
 
-  ggsave(
-    paste0(plot_full_name, ".pdf"),
-    plot = plot_obj,
-    height = height,
-    width = width
-  )
-  ggsave(
-    paste0(plot_full_name, ".png"),
-    plot = plot_obj,
-    height = height,
-    width = width
-  )
+  for (path in c(pdf_path, png_path)) {
+    ggplot2::ggsave(
+      path,
+      plot = plot_obj,
+      height = height,
+      width = width
+    )
+  }
 
   symlink_pdf <- file.path(plot_base_dir, "by-analysis", paste0(plot_name, ".pdf"))
   symlink_png <- file.path(plot_base_dir, "by-analysis", paste0(plot_name, ".png"))
 
-  if (file.exists(symlink_pdf)) {
-    file.remove(symlink_pdf)
-  }
+  unlink(c(symlink_pdf, symlink_png))
+  file.symlink(from = c(pdf_path, png_path), to = c(symlink_pdf, symlink_png))
 
-  if (file.exists(symlink_png)) {
-    file.remove(symlink_png)
-  }
-
-  file.symlink(from = paste0(plot_full_name, ".pdf"), to = symlink_pdf)
-  file.symlink(from = paste0(plot_full_name, ".png"), to = symlink_png)
-
-  invisible(paste0(plot_full_name, ".pdf"))
+  invisible(pdf_path)
 }
 
 #' Plot each group of a data frame to a multi-page PDF

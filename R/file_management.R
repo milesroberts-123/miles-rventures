@@ -13,10 +13,10 @@
 check_file_exists <- function(file_name) {
   if (file.exists(file_name)) {
     file.remove(file_name)
-    message(paste(file_name, "from previous run deleted."))
+    message(file_name, " from previous run deleted.")
     invisible(TRUE)
   } else {
-    message(paste(file_name, "does not exist."))
+    message(file_name, " does not exist.")
     invisible(FALSE)
   }
 }
