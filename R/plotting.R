@@ -84,7 +84,7 @@ plot_groups_pdf <- function(data, groupings, plot_fn, filepath, width = 8, heigh
 
   data_list <- split(data, data[groupings], drop = TRUE)
 
-  grDevices::pdf(filepath, width = width, height = height)
+  grDevices::cairo_pdf(filepath, width = width, height = height)
   on.exit(grDevices::dev.off(), add = TRUE)
 
   for (sub_data in data_list) {
