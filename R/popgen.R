@@ -54,17 +54,3 @@ WF_sel <- function(N, q, h, s, G) {
   }
   counts / N
 }
-
-#' Deprecated: Wright-Fisher simulation under selection
-#'
-#' [WF.sel()] is deprecated; use [WF_sel()] instead. Behaves identically.
-#'
-#' @inheritParams WF_sel
-#'
-#' @return See [WF_sel()].
-#' @export
-#' @keywords internal
-WF.sel <- function(N, q, h, s, G) {
-  warning("WF.sel() is deprecated; use WF_sel() instead.", call. = FALSE)
-  WF_sel(N = N, q = q, h = h, s = s, G = G)
-}

@@ -31,14 +31,3 @@ test_that("WF_sel errors on wrong-length s", {
     "scalar or a vector of length G - 1"
   )
 })
-
-test_that("WF.sel alias warns and delegates to WF_sel", {
-  set.seed(42)
-  expected <- WF_sel(N = 100, q = 0.1, h = 0.5, s = 0.01, G = 10)
-  set.seed(42)
-  expect_warning(
-    out <- WF.sel(N = 100, q = 0.1, h = 0.5, s = 0.01, G = 10),
-    "deprecated"
-  )
-  expect_identical(out, expected)
-})
