@@ -82,3 +82,74 @@ plot_groups_pdf <- function(data, groupings, plot_fn, filepath, width = 8, heigh
 
   invisible(filepath)
 }
+
+#' Scatterplot comparing predictions to true values
+#'
+#' Plots predicted values against true values for a continuous variable, with
+#' the identity line (predictions = truth), a linear fit, and the Pearson
+#' correlation with 95% CI, sample size, and RMSE in the plot title. Pairs
+#' where either variable is NA, NaN, or infinite are dropped before analysis.
+#'
+#' @param predictions Numeric vector of predicted values.
+#' @param truth Numeric vector of true values, same length as `predictions`.
+#' @param model_label Model name shown in the plot title.
+#' @param truth_label Axis label for the true values.
+#' @param pred_label Axis label for the predicted values.
+#' @param color_var Numeric vector mapped to point color, same length as
+#'   `predictions`.
+#' @param color_label Legend title for the color scale.
+#'
+#' @return A ggplot object.
+#' @export
+#'
+#' @examples
+#' set.seed(1)
+#' truth <- rnorm(100)
+#' compare_predictions_truth_scatter(
+#'   predictions = truth + rnorm(100, sd = 0.5),
+#'   truth = truth,
+#'   model_label = "Example model",
+#'   truth_label = "Truth",
+#'   pred_label = "Prediction",
+#'   color_var = truth,
+#'   color_label = "True value"
+#' )
+compare_predictions_truth_scatter <- function(predictions, truth, model_label,
+                                              truth_label, pred_label,
+                                              color_var, color_label) {
+  keep <- !(is.na(predictions) | is.nan(predictions) | is.infinite(predictions) |
+    is.na(truth) | is.nan(truth) | is.infinite(truth))
+  predictions <- predictions[keep]
+  truth <- truth[keep]
+  color_var <- color_var[keep]
+
+  # Pearson correlation is invariant to log transforms of either variable
+  cor_test <- stats::cor.test(predictions, truth, method = "pearson")
+  cor_est <- signif(cor_test$estimate, digits = 3)
+  cor_lwb <- signif(cor_test$conf.int[1], digits = 3)
+  cor_upb <- signif(cor_test$conf.int[2], digits = 3)
+  cor_n <- length(truth)
+
+  rmse <- signif(sqrt(mean((predictions - truth)^2)), digits = 3)
+
+  plotdata <- data.frame(predictions = predictions, truth = truth, color_var = color_var)
+
+  ggplot2::ggplot(ggplot2::aes(y = predictions, x = truth, color = color_var), data = plotdata) +
+    ggplot2::geom_point() +
+    ggplot2::geom_abline(slope = 1, intercept = 0, color = "#8C0172", linewidth = 2) +
+    ggplot2::geom_smooth(method = "lm", color = "#9B951B", linewidth = 2) +
+    ggplot2::scale_color_continuous(low = "#04050A", high = "#F9CCF9") +
+    ggplot2::theme_classic() +
+    ggplot2::theme(text = ggplot2::element_text(size = 16)) +
+    ggplot2::labs(
+      x = truth_label,
+      y = pred_label,
+      title = paste(
+        model_label, "\nr = ", cor_est, ", n = ", cor_n,
+        "\n95 % CI = [", cor_lwb, ", ", cor_upb, "]",
+        "\nRMSE = ", rmse,
+        sep = ""
+      ),
+      color = color_label
+    )
+}
