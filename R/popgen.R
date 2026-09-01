@@ -54,3 +54,89 @@ WF_sel <- function(N, q, h, s, G) {
   }
   counts / N
 }
+
+#' Standardized variance in allele-frequency change
+#'
+#' Estimates Fc, the standardized variance in allele-frequency change between
+#' two time points (Waples 1989): the sum of squared allele-frequency shifts
+#' across loci, normalized by the sum of `p0 * (1 - p0)` weighting terms.
+#'
+#' @param p0 Numeric vector of initial allele frequencies, between 0 and 1.
+#' @param pt Numeric vector of allele frequencies after `t` generations,
+#'   same length as `p0`.
+#'
+#' @return A single numeric value, the standardized variance in allele
+#'   frequency change.
+#' @export
+#'
+#' @examples
+#' fc(p0 = 0.5, pt = 0.25)
+fc <- function(p0, pt) {
+  stopifnot(
+    length(p0) == length(pt),
+    all(p0 >= 0, na.rm = TRUE),
+    all(pt >= 0, na.rm = TRUE),
+    all(p0 <= 1, na.rm = TRUE),
+    all(pt <= 1, na.rm = TRUE)
+  )
+
+  fsum_num <- (p0 - pt)^2
+  fsum_denom <- p0 * (1 - p0)
+
+  sum(fsum_num, na.rm = TRUE) / sum(fsum_denom, na.rm = TRUE)
+}
+
+#' Estimate Ne from the temporal method, corrected for selfing
+#'
+#' Applies the Waples (1989) correction for biased N/Ne estimates to convert
+#' an estimate of N/Ne derived from the selfing rate into an estimate of the
+#' effective population size Ne. Takes lower and upper bounds of the N/Ne
+#' ratio and returns the corresponding bounds of Ne, using the standardized
+#' variance in allele-frequency change computed with [fc()].
+#'
+#' @param r_low Lower bound of the N/Ne ratio estimated from the selfing rate.
+#' @param r_high Upper bound of the N/Ne ratio estimated from the selfing rate.
+#' @param p0 Numeric vector of initial allele frequencies, between 0 and 1,
+#'   passed to [fc()].
+#' @param pt Numeric vector of final allele frequencies, between 0 and 1,
+#'   passed to [fc()].
+#' @param S0 Sample size (number of diploid individuals) at time 0.
+#' @param St Sample size (number of diploid individuals) at time t.
+#' @param t Number of generations between the two samples.
+#'
+#' @return A numeric vector of length 2: Ne estimated with `r_low` and with
+#'   `r_high`.
+#' @export
+#'
+#' @examples
+#' waples_ne(r_low = 2, r_high = 2, p0 = 0.5, pt = 0.25, S0 = 20, St = 20, t = 1)
+waples_ne <- function(r_low, r_high, p0, pt, S0, St, t) {
+  r <- c(r_low, r_high)
+  Fc <- fc(p0, pt)
+  ne <- (r * t - 2) / (2 * r * (Fc - 1 / S0 - 1 / St))
+  return(ne)
+}
+
+#' Expected linkage disequilibrium between loci a given distance apart
+#'
+#' Computes the expected r^2 between two loci separated by distance `d`,
+#' accounting for finite sample size and population-scaled recombination
+#' rate (Hill and Weir 1988).
+#'
+#' @param d Distance between two loci in bp.
+#' @param n Sample size.
+#' @param C Population-scaled recombination rate: 4Nc.
+#'
+#' @return The expected r^2.
+#' @export
+#'
+#' @examples
+#' hill_weir_r2(d = 1000, n = 30, C = 0.001)
+#' hill_weir_r2(d = c(0, 1000, 10000), n = 30, C = 0.001)
+hill_weir_r2 <- function(d, n, C) {
+  part1 <- (10 + C * d) / ((2 + C * d) * (11 + C * d))
+  part2 <- 1 + ((3 + C * d) * (12 + 12 * C * d + (C * d)^2)) /
+    (n * (2 + C * d) * (11 + C * d))
+  r2 <- part1 * part2
+  return(r2)
+}
