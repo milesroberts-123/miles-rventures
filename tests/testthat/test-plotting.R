@@ -143,3 +143,52 @@ test_that("plot_paf_dotplot applies min_alen and min_mapq filters", {
     "No alignments found"
   )
 })
+
+make_test_snp_table <- function() {
+  data.frame(
+    CHROM = rep(c("chrA", "chrB", "chrC"), c(5, 3, 2)),
+    POS = c(100, 250, 400, 400, 500, 220, 550, 700, 400, 900),
+    pvalue = c(0.9, 0.5, 1e-6, 0.2, 0.8, 0.01, 0.001, 0.3, 3e-8, 0.7)
+  )
+}
+
+test_that("plot_manhattan computes cumulative positions across chromosomes", {
+  skip_if_not_installed("ggplot2")
+  p <- plot_manhattan(make_test_snp_table())
+  expect_s3_class(p, "ggplot")
+
+  # chrB offsets by chrA's max POS (500); chrC by chrA + chrB (500 + 700 = 1200)
+  expect_identical(
+    p$data$BPcum,
+    c(100, 250, 400, 400, 500, 720, 1050, 1200, 1600, 2100)
+  )
+  # x-axis breaks are one per chromosome, at chromosome centers
+  expect_identical(
+    ggplot2::ggplot_build(p)$layout$panel_scales_x[[1]]$breaks,
+    c(300, 960, 1850)
+  )
+})
+
+test_that("plot_manhattan adds an orange highlight layer only when the column exists", {
+  skip_if_not_installed("ggplot2")
+  p <- plot_manhattan(make_test_snp_table())
+  expect_identical(length(p$layers), 1L)
+
+  snp_h <- make_test_snp_table()
+  snp_h$highlight <- c(rep("no", 9), "yes")
+  p_h <- plot_manhattan(snp_h)
+  expect_identical(length(p_h$layers), 2L)
+  expect_identical(p_h$layers[[2]]$aes_params$colour, "orange")
+})
+
+test_that("plot_manhattan errors on empty data or missing columns", {
+  skip_if_not_installed("ggplot2")
+  expect_error(
+    plot_manhattan(make_test_snp_table()[0, ]),
+    "No SNPs in 'data'"
+  )
+  expect_error(
+    plot_manhattan(data.frame(CHROM = "chrA", POS = 1)),
+    "Missing required column"
+  )
+})

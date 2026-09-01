@@ -222,3 +222,97 @@ plot_paf_dotplot <- function(paf, q_seq, t_seq, xlab, ylab, title,
     ggplot2::theme_minimal() +
     ggplot2::theme(panel.grid.minor = ggplot2::element_blank())
 }
+
+#' Manhattan plot from a snp table of stats
+#'
+#' Plots a Manhattan plot from a table of SNP associations: cumulative
+#' genomic position on the x axis (`BPcum`, computed across chromosomes in
+#' the order they appear in `CHROM`), `-log10(pvalue)` on the y axis, and
+#' alternating grey/black points per chromosome. Chromosome labels are drawn
+#' at each chromosome's center. SNPs with `highlight == "yes"` (if the column
+#' is present) are overplotted in orange.
+#'
+#' @param data A data frame (or tibble) with columns `CHROM`, `POS`, and
+#'   `pvalue`. An optional `highlight` column (`"yes"` marks points to
+#'   overplot in orange) is used if present.
+#' @param xlab X-axis label (default `"Chromosome"`).
+#' @param ylab Y-axis label (default `"-log10(p)"`).
+#' @param title Plot title.
+#'
+#' @return A ggplot object. Save it with [save_plot()].
+#' @export
+#'
+#' @examples
+#' snp_table <- data.frame(
+#'   CHROM = rep(c("chr1", "chr2"), c(900, 600)),
+#'   POS = c(1:900 * 1000, 1:600 * 3000),
+#'   pvalue = runif(1500, 1e-8, 1)
+#' )
+#' plot_manhattan(snp_table, title = "Demo Manhattan plot")
+plot_manhattan <- function(data, xlab = "Chromosome", ylab = "-log10(p)",
+                           title = NULL) {
+  required_cols <- c("CHROM", "POS", "pvalue")
+  missing_cols <- setdiff(required_cols, names(data))
+  if (length(missing_cols) > 0) {
+    stop("Missing required column(s): ", paste(missing_cols, collapse = ", "), ".")
+  }
+  if (nrow(data) == 0) {
+    stop("No SNPs in 'data'.")
+  }
+
+  # Cumulative base-pair offset per chromosome, in order of first appearance
+  chr_bounds <- dplyr::summarise(
+    dplyr::group_by(data, CHROM),
+    chr_len = max(POS),
+    .groups = "drop"
+  )
+  chr_bounds <- dplyr::mutate(chr_bounds, tot = cumsum(chr_len) - chr_len)
+  chr_bounds$chr_len <- NULL
+
+  don <- dplyr::arrange(
+    dplyr::left_join(data, chr_bounds, by = "CHROM"),
+    CHROM, POS
+  )
+  don$BPcum <- don$POS + don$tot
+  don$tot <- NULL
+
+  axisdf <- dplyr::summarise(
+    dplyr::group_by(don, CHROM),
+    center = (max(BPcum) + min(BPcum)) / 2,
+    .groups = "drop"
+  )
+
+  p <- ggplot2::ggplot(don) +
+    ggplot2::geom_point(
+      ggplot2::aes(
+        x = BPcum, y = -log10(pvalue),
+        color = as.factor(CHROM)
+      ),
+      alpha = 0.8, size = 1.3, shape = 16
+    ) +
+    ggplot2::scale_color_manual(
+      values = rep(c("grey", "black"), length.out = length(unique(don$CHROM)))
+    ) +
+    ggplot2::scale_x_continuous(
+      breaks = axisdf$center,
+      labels = axisdf$CHROM
+    ) +
+    ggplot2::scale_y_continuous(expand = c(0, 0)) +
+    ggplot2::theme(
+      legend.position = "none",
+      panel.border = ggplot2::element_blank(),
+      panel.grid.major.x = ggplot2::element_blank(),
+      panel.grid.minor.x = ggplot2::element_blank()
+    ) +
+    ggplot2::labs(x = xlab, y = ylab, title = title)
+
+  if ("highlight" %in% names(don)) {
+    p <- p + ggplot2::geom_point(
+      data = dplyr::filter(don, highlight == "yes"),
+      ggplot2::aes(x = BPcum, y = -log10(pvalue)),
+      color = "orange", size = 1.5
+    )
+  }
+
+  p
+}
