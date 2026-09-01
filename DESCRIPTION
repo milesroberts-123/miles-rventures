@@ -8,7 +8,9 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Imports:
-    ggplot2 (>= 3.4.0)
+    ggplot2 (>= 3.4.0),
+    dplyr,
+    readr
 Suggests:
     testthat (>= 3.0.0)
 Config/testthat/edition: 3

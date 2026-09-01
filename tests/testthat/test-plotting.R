@@ -68,3 +68,78 @@ test_that("compare_predictions_truth_scatter drops NA/NaN/Inf pairs", {
   expect_s3_class(p, "ggplot")
   expect_identical(nrow(p$data), 4L)
 })
+
+make_test_paf <- function() {
+  data.frame(
+    qname = c("q1", "q1", "q2"),
+    qlen = c(10000, 10000, 10000),
+    qstart = c(100, 500, 100),
+    qend = c(4000, 9000, 4000),
+    strand = c("+", "-", "+"),
+    tname = c("t1", "t1", "t2"),
+    tlen = c(20000, 20000, 20000),
+    tstart = c(200, 600, 200),
+    tend = c(5000, 10000, 5000),
+    nmatch = c(3900, 450, 3900),
+    alen = c(3900, 500, 3900),
+    mapq = c(60, 60, 0)
+  )
+}
+
+test_that("plot_paf_dotplot returns a ggplot for matching query and target", {
+  skip_if_not_installed("ggplot2")
+  p <- plot_paf_dotplot(
+    make_test_paf(),
+    q_seq = "q1", t_seq = "t1",
+    xlab = "Query", ylab = "Target", title = "Test"
+  )
+  expect_s3_class(p, "ggplot")
+  # only the long q1-t1 block survives the default min_alen filter
+  expect_identical(nrow(p$data), 1L)
+})
+
+test_that("plot_paf_dotplot orients reverse-strand alignments", {
+  skip_if_not_installed("ggplot2")
+  paf <- data.frame(
+    qname = "q1", qlen = 10000, qstart = 100, qend = 4000, strand = "-",
+    tname = "t1", tlen = 20000, tstart = 200, tend = 5000,
+    nmatch = 3900, alen = 3900, mapq = 60
+  )
+  p <- plot_paf_dotplot(
+    paf, q_seq = "q1", t_seq = "t1",
+    xlab = "Query", ylab = "Target", title = "Test"
+  )
+  # reverse strand: original tstart (200) becomes the segment's yend
+  expect_identical(p$data$tstart_plot[1], 5000)
+  expect_identical(p$data$tend_plot[1], 200)
+})
+
+test_that("plot_paf_dotplot applies min_alen and min_mapq filters", {
+  skip_if_not_installed("ggplot2")
+  paf <- make_test_paf()
+  # lower thresholds keep both q1-t1 blocks
+  p <- plot_paf_dotplot(
+    paf, q_seq = "q1", t_seq = "t1",
+    xlab = "Query", ylab = "Target", title = "Test",
+    min_alen = 100, min_mapq = 1
+  )
+  expect_identical(nrow(p$data), 2L)
+
+  # default min_alen = 1000 drops the short q1-t1 block
+  p_strict <- plot_paf_dotplot(
+    paf, q_seq = "q1", t_seq = "t1",
+    xlab = "Query", ylab = "Target", title = "Test",
+    min_alen = 1000
+  )
+  expect_identical(nrow(p_strict$data), 1L)
+
+  # asking for a pair with no alignments anywhere in the file errors
+  expect_error(
+    plot_paf_dotplot(
+      paf, q_seq = "q2", t_seq = "t1",
+      xlab = "Query", ylab = "Target", title = "Test",
+      min_alen = 100
+    ),
+    "No alignments found"
+  )
+})

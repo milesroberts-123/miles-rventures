@@ -45,3 +45,48 @@ append_table <- function(x, output_name) {
               sep = ",",
               quote = FALSE)
 }
+
+#' Read a PAF alignment file
+#'
+#' Reads a PAF (Pairwise mApping Format) file produced by minimap2, keeps the
+#' 12 mandatory columns, coerces the numeric fields, and adds a per-alignment
+#' percent-identity column.
+#'
+#' @param file Path to a PAF file. PAF files written by `minimap2 --paf` have
+#'   no header row; extra columns beyond the 12 mandatory ones are ignored.
+#'
+#' @return A tibble with 13 columns: the 12 mandatory PAF fields
+#'   (`qname`, `qlen`, `qstart`, `qend`, `strand`, `tname`, `tlen`,
+#'   `tstart`, `tend`, `nmatch`, `alen`, `mapq` — all but `qname`, `strand`,
+#'   and `tname` numeric) plus `pident` (`nmatch / alen`).
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' paf <- read_paf("hap2_vs_hap1.paf")
+#' }
+read_paf <- function(file) {
+  # 12 mandatory PAF columns
+  paf_cols <- c(
+    "qname", "qlen", "qstart", "qend", "strand",
+    "tname", "tlen", "tstart", "tend",
+    "nmatch", "alen", "mapq"
+  )
+
+  # Read every field as character (PAF extra columns are ragged), then keep
+  # the 12 mandatory columns and coerce the numeric fields.
+  paf <- readr::read_tsv(
+    file,
+    col_names = FALSE,
+    col_types = readr::cols(.default = readr::col_character()),
+    show_col_types = FALSE
+  )
+  paf <- paf[, seq_len(12)]
+  names(paf) <- paf_cols
+
+  dplyr::mutate(
+    paf,
+    dplyr::across(c(qlen, qstart, qend, tlen, tstart, tend, nmatch, alen, mapq), as.numeric),
+    pident = nmatch / alen
+  )
+}

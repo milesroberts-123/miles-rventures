@@ -153,3 +153,72 @@ compare_predictions_truth_scatter <- function(predictions, truth, model_label,
       color = color_label
     )
 }
+
+#' Dotplot of PAF alignments between two sequences
+#'
+#' Plots alignment blocks from a PAF data frame (as returned by [read_paf()])
+#' as line segments: query coordinates on the x axis, target coordinates on
+#' the y axis, colored by strand. Reverse-strand blocks are oriented so that
+#' collinear alignments lie on a shared diagonal. Low-quality blocks can be
+#' dropped via `min_alen`/`min_mapq`.
+#'
+#' @param paf A PAF data frame from [read_paf()].
+#' @param q_seq Query sequence name to plot (`qname`).
+#' @param t_seq Target sequence name to plot (`tname`).
+#' @param xlab X-axis label (query).
+#' @param ylab Y-axis label (target).
+#' @param title Plot title.
+#' @param min_alen Minimum alignment block length to plot (default 1000).
+#' @param min_mapq Minimum mapping quality to plot (default 1).
+#'
+#' @return A ggplot object. Add highlights (e.g. [ggplot2::geom_hline()]) and
+#'   save it with [save_plot()].
+#' @export
+#'
+#' @examples
+#' paf <- data.frame(
+#'   qname = c("q1", "q1", "q1", "q2"),
+#'   qlen = 10000, qstart = c(100, 500, 100, 100), qend = c(4000, 9000, 4000, 4000),
+#'   strand = c("+", "+", "-", "+"),
+#'   tname = c("t1", "t1", "t1", "t2"),
+#'   tlen = 10000, tstart = c(200, 600, 700, 200),
+#'   tend = c(5000, 10000, 10000, 5000),
+#'   nmatch = c(3900, 4500, 3800, 2900),
+#'   alen = c(3900, 4500, 4000, 3900),
+#'   mapq = c(60, 60, 60, 0)
+#' )
+#' p <- plot_paf_dotplot(paf, q_seq = "q1", t_seq = "t1",
+#'                       xlab = "Query q1", ylab = "Target t1",
+#'                       title = "Demo dotplot")
+plot_paf_dotplot <- function(paf, q_seq, t_seq, xlab, ylab, title,
+                             min_alen = 1000, min_mapq = 1) {
+  paf_f <- dplyr::filter(paf, alen >= min_alen, mapq >= min_mapq)
+
+  # Orient reverse-strand alignments for correct diagonal direction
+  paf_plot <- dplyr::mutate(
+    paf_f,
+    tstart_plot = dplyr::if_else(strand == "-", tend, tstart),
+    tend_plot = dplyr::if_else(strand == "-", tstart, tend)
+  )
+
+  paf_plot <- dplyr::filter(paf_plot, qname == q_seq, tname == t_seq)
+  if (nrow(paf_plot) == 0) {
+    stop("No alignments found between '", q_seq, "' and '", t_seq, "'.")
+  }
+
+  ggplot2::ggplot(paf_plot) +
+    ggplot2::geom_segment(
+      ggplot2::aes(
+        x = qstart, xend = qend,
+        y = tstart_plot, yend = tend_plot,
+        color = strand
+      ),
+      linewidth = 0.6
+    ) +
+    ggplot2::scale_color_manual(
+      values = c("+" = "steelblue", "-" = "firebrick")
+    ) +
+    ggplot2::labs(x = xlab, y = ylab, title = title, color = "Strand") +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(panel.grid.minor = ggplot2::element_blank())
+}
