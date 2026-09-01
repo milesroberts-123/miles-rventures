@@ -105,7 +105,7 @@ plot_groups_pdf <- function(data, groupings, plot_fn, filepath, width = 8, heigh
 #' @examples
 #' set.seed(1)
 #' truth <- rnorm(100)
-#' compare_predictions_truth_scatter(
+#' plot_predictions_truth_scatter(
 #'   predictions = truth + rnorm(100, sd = 0.5),
 #'   truth = truth,
 #'   model_label = "Example model",
@@ -114,7 +114,7 @@ plot_groups_pdf <- function(data, groupings, plot_fn, filepath, width = 8, heigh
 #'   color_var = truth,
 #'   color_label = "True value"
 #' )
-compare_predictions_truth_scatter <- function(predictions, truth, model_label,
+plot_predictions_truth_scatter <- function(predictions, truth, model_label,
                                               truth_label, pred_label,
                                               color_var, color_label) {
   keep <- !(is.na(predictions) | is.nan(predictions) | is.infinite(predictions) |

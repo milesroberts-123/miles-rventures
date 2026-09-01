@@ -36,11 +36,11 @@ test_that("plot_groups_pdf writes a PDF", {
   expect_gt(file.info(f)$size, 0)
 })
 
-test_that("compare_predictions_truth_scatter returns a ggplot", {
+test_that("plot_predictions_truth_scatter returns a ggplot", {
   skip_if_not_installed("ggplot2")
   set.seed(1)
   truth <- rnorm(50)
-  p <- compare_predictions_truth_scatter(
+  p <- plot_predictions_truth_scatter(
     predictions = truth + rnorm(50, sd = 0.5),
     truth = truth,
     model_label = "Test model",
@@ -52,11 +52,11 @@ test_that("compare_predictions_truth_scatter returns a ggplot", {
   expect_s3_class(p, "ggplot")
 })
 
-test_that("compare_predictions_truth_scatter drops NA/NaN/Inf pairs", {
+test_that("plot_predictions_truth_scatter drops NA/NaN/Inf pairs", {
   skip_if_not_installed("ggplot2")
   truth <- c(1, 2, NA, 4, NaN, 6, Inf, 8)
   predictions <- c(1.1, 2.2, 3.3, 4.4, 5.5, NaN, 7.7, 8.8)
-  p <- compare_predictions_truth_scatter(
+  p <- plot_predictions_truth_scatter(
     predictions = predictions,
     truth = truth,
     model_label = "Test model",
