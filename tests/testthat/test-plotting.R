@@ -192,3 +192,74 @@ test_that("plot_manhattan errors on empty data or missing columns", {
     "Missing required column"
   )
 })
+
+make_test_covmat <- function() {
+  matrix(
+    c(1.0, 0.3, 0.1,
+      0.3, 1.0, 0.5,
+      0.1, 0.5, 1.0),
+    nrow = 3, byrow = TRUE,
+    dimnames = list(c("s1", "s2", "s3"), c("s1", "s2", "s3"))
+  )
+}
+
+test_that("get_upper_tri blanks the strict lower triangle", {
+  upper <- get_upper_tri(make_test_covmat())
+  expect_true(all(is.na(upper[lower.tri(upper)])))
+  expect_identical(unname(upper[1, ]), c(1, 0.3, 0.1))
+})
+
+test_that("plot_var_cov_matrix builds tile/heatmap layers from the upper triangle", {
+  skip_if_not_installed("ggplot2")
+  p <- plot_var_cov_matrix(make_test_covmat())
+  expect_s3_class(p, "ggplot")
+
+  # upper triangle only: 3 + 2 + 1 cells, diagonal included
+  expect_identical(nrow(p$data), 6L)
+  # base layer uses tiles with a white border
+  expect_s3_class(p$layers[[1]]$geom, "GeomTile")
+  expect_identical(p$layers[[1]]$aes_params$colour, "white")
+  # values are printed on the tiles
+  expect_identical(length(p$layers), 2L)
+
+  # diagonal (value 1) is included; strictly-lower cells are not
+  expect_false(any(p$data$Var1 == "s3" & p$data$Var2 == "s1"))
+  expect_true(any(p$data$Var1 == "s1" & p$data$Var2 == "s3"))
+})
+
+test_that("plot_var_cov_matrix switches variants correctly", {
+  skip_if_not_installed("ggplot2")
+  covmat <- make_test_covmat()
+
+  # raster: base geom changes, layer count unchanged
+  p_raster <- plot_var_cov_matrix(covmat, tile_or_raster = "raster")
+  expect_s3_class(p_raster$layers[[1]]$geom, "GeomRaster")
+
+  # no values: single layer
+  p_noval <- plot_var_cov_matrix(covmat, include_values = FALSE)
+  expect_identical(length(p_noval$layers), 1L)
+
+  # continuous mode: gradient2 fill scale
+  p_cont <- plot_var_cov_matrix(covmat)
+  expect_s3_class(p_cont$scales$scales[[1]], "ScaleContinuous")
+
+  # tick-labels-off branch applies the blank theme
+  p_bare <- plot_var_cov_matrix(covmat, include_tick_labels = FALSE)
+  expect_s3_class(p_bare$theme$axis.text.x, "element_blank")
+
+  # invalid enum values are rejected
+  expect_error(
+    plot_var_cov_matrix(covmat, tile_or_raster = "dots"),
+    "'arg' should be one of"
+  )
+  expect_error(
+    plot_var_cov_matrix(covmat, discrete_or_continuous = "spectral"),
+    "'arg' should be one of"
+  )
+
+  # non-square or asymmetrically-named matrices are rejected
+  expect_error(plot_var_cov_matrix(covmat[1:2, ]), "square")
+  bad_names <- covmat
+  rownames(bad_names) <- c("a", "b", "c")
+  expect_error(plot_var_cov_matrix(bad_names), "identical row and column names")
+})

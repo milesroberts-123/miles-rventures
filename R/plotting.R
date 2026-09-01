@@ -316,3 +316,145 @@ plot_manhattan <- function(data, xlab = "Chromosome", ylab = "-log10(p)",
 
   p
 }
+
+# Keep only the upper triangle of a square matrix: the strict lower triangle
+# becomes NA, so it drops out when melting (same as the reshape2::melt recipe
+# this function was ported from).
+get_upper_tri <- function(mat) {
+  mat[lower.tri(mat, diag = FALSE)] <- NA
+  mat
+}
+
+#' Heatmap of a variance-covariance matrix
+#'
+#' Plots the upper triangle of a square variance-covariance (or correlation)
+#' matrix as a heatmap: one tile per cell pair, filled by the cell value
+#' (continuous green-magenta gradient centered at 0, or a discrete scico
+#' palette). Cell values and/or tick labels can be suppressed for a
+#' publication-style matrix figure.
+#'
+#' @param covmat A square matrix with symmetric row and column names.
+#' @param include_values Print each cell's value (rounded to 4 decimals) on
+#'   its tile.
+#' @param include_tick_labels Show axis tick labels; if `FALSE`, all axis
+#'   text and panel decoration is removed.
+#' @param low_col Fill color for the most negative values.
+#' @param mid_col Fill color at the midpoint (0).
+#' @param high_col Fill color for the most positive values.
+#' @param legend_name Legend title.
+#' @param tile_or_raster `"tile"` (white cell borders) or `"raster"` (no
+#'   borders) geometry.
+#' @param discrete_or_continuous `"continuous"` uses a diverging color
+#'   gradient (`low_col`/`mid_col`/`high_col`); `"discrete"` uses the scico
+#'   `"bam"` palette (requires the scico package, a suggested dependency).
+#'
+#' @return A ggplot object. Save it with [save_plot()].
+#'
+#' @note The default legend title contains a Unicode character (Δ). Saving
+#'   with the default `pdf()` device cannot render it; use a Unicode-capable
+#'   device such as `cairo_pdf` (e.g. `ggplot2::ggsave(..., device =
+#'   grDevices::cairo_pdf)`).
+#' @export
+#'
+#' @examples
+#' covmat <- matrix(
+#'   c(1.0, 0.3, 0.1,
+#'     0.3, 1.0, 0.5,
+#'     0.1, 0.5, 1.0),
+#'   nrow = 3, byrow = TRUE,
+#'   dimnames = list(c("s1", "s2", "s3"), c("s1", "s2", "s3"))
+#' )
+#' # ASCII legend title keeps the example compatible with the default pdf()
+#' # device; the default "Cov(\u0394pi, \u0394pj)" needs a Unicode-capable device
+#' plot_var_cov_matrix(covmat, include_values = TRUE, legend_name = "Cov")
+plot_var_cov_matrix <- function(covmat,
+                                include_values = TRUE,
+                                include_tick_labels = TRUE,
+                                low_col = "#65014B",
+                                mid_col = "#F5F0F0",
+                                high_col = "#0C4C00",
+                                legend_name = "Cov(\u0394pi, \u0394pj)",
+                                tile_or_raster = c("tile", "raster"),
+                                discrete_or_continuous = c("continuous", "discrete")) {
+  tile_or_raster <- match.arg(tile_or_raster)
+  discrete_or_continuous <- match.arg(discrete_or_continuous)
+
+  if (!is.matrix(covmat) || nrow(covmat) != ncol(covmat)) {
+    stop("'covmat' must be a square matrix.")
+  }
+  if (!identical(rownames(covmat), colnames(covmat))) {
+    stop("'covmat' must have identical row and column names.")
+  }
+
+  upper_tri <- get_upper_tri(covmat)
+
+  # Long format in Var1/Var2/value columns, upper-triangle cells only,
+  # same semantics as reshape2::melt(..., na.rm = TRUE)
+  melted_cormat <- na.omit(as.data.frame.table(
+    upper_tri,
+    responseName = "value"
+  ))
+
+  plot_cor <- ggplot2::ggplot(melted_cormat, ggplot2::aes(Var2, Var1, fill = value))
+
+  if (tile_or_raster == "tile") {
+    plot_cor <- plot_cor + ggplot2::geom_tile(color = "white")
+  } else {
+    plot_cor <- plot_cor + ggplot2::geom_raster()
+  }
+
+  if (include_values) {
+    plot_cor <- plot_cor + ggplot2::geom_text(
+      ggplot2::aes(label = round(value, 4)),
+      size = 5,
+      color = "black"
+    )
+  }
+
+  if (discrete_or_continuous == "discrete") {
+    if (!requireNamespace("scico", quietly = TRUE)) {
+      stop("The scico package is required for discrete_or_continuous = 'discrete'.")
+    }
+    plot_cor <- plot_cor + scico::scale_fill_scico_d(
+      palette = "bam",
+      begin = 0.1,
+      end = 0.9,
+      name = legend_name
+    )
+  } else {
+    plot_cor <- plot_cor + ggplot2::scale_fill_gradient2(
+      low = low_col,
+      mid = mid_col,
+      high = high_col,
+      midpoint = 0,
+      space = "Lab",
+      name = legend_name
+    )
+  }
+
+  plot_cor <- plot_cor + ggplot2::theme_minimal()
+
+  if (include_tick_labels) {
+    plot_cor <- plot_cor + ggplot2::theme(
+      axis.text.x = ggplot2::element_text(
+        angle = 45,
+        vjust = 1,
+        hjust = 1
+      ),
+      text = ggplot2::element_text(size = 14)
+    )
+  } else {
+    plot_cor <- plot_cor + ggplot2::theme(
+      axis.text.x = ggplot2::element_blank(),
+      axis.text.y = ggplot2::element_blank(),
+      panel.background = ggplot2::element_blank(),
+      panel.grid.major = ggplot2::element_blank(),
+      panel.grid.minor = ggplot2::element_blank(),
+      panel.border = ggplot2::element_blank()
+    )
+  }
+
+  # Remove axis names
+  plot_cor + ggplot2::coord_fixed() +
+    ggplot2::labs(x = "", y = "")
+}
