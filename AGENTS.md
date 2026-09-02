@@ -18,4 +18,4 @@ An R package of convenience functions for use across RStudio projects (per `READ
 
 - Branch: `main`; remote `origin` → `github.com/milesroberts-123/miles-rventures.git`.
 - Never push to `main` without asking first.
-- Before every push: export the full OpenCode transcript and compress it with `xz -9`, keeping only the `.xz` archive.
+- Before every push: export the full OpenCode transcript as Markdown (`session-<short-id>.md` in the repo root), compress it with `xz -9` alongside, and commit both files.
