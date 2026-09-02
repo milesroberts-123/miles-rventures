@@ -12,6 +12,7 @@ Imports:
     dplyr,
     readr
 Suggests:
+    abc,
     testthat (>= 3.0.0),
     scico
 Config/testthat/edition: 3

@@ -50,6 +50,7 @@ library(rventures)
 
 - `corr_ci_autocorr()` — Pearson correlation CI adjusted for AR(1) autocorrelation
 - `lm_sim()`, `multicol_sim()` — linear-model simulations
+- `train_abc()` — ABC cross-validation: predict each validation simulation from training simulations via `abc` (requires the suggested `abc` package)
 
 ### Population genetics
 

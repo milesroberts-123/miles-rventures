@@ -156,3 +156,108 @@ multicol_sim <- function(n, mu1, mu2, b0, b1, b2, covmat) {
     coef_table(Y ~ X2, "single")
   )
 }
+
+
+#' Approximate Bayesian computation cross-validation
+#'
+#' Evaluates an ABC model the way a neural network is validated: after
+#' "training" on a set of simulated parameter/summary-statistic pairs, each
+#' validation data point is predicted using the training data alone. Each
+#' validation simulation is used as the ABC target in turn, and the posterior
+#' is summarized by its credible interval, mean, median, and mode.
+#'
+#' Requires the `abc` package (installed separately; it is only suggested by
+#' this package).
+#'
+#' @param train_sample Data frame of training simulations; columns selected by
+#'   `outcomes` and `summary_stats`.
+#' @param val_sample Data frame of validation simulations with the same
+#'   columns.
+#' @param outcomes Character vector naming the outcome (parameter) column(s).
+#' @param summary_stats Character vector naming the summary statistic
+#'   column(s).
+#' @param tol ABC acceptance tolerance, passed to `abc::abc()`.
+#' @param method ABC method, passed to `abc::abc()` (`"rejection"`,
+#'   `"loclinear"`, `"neuralnet"`, or `"ridge"`).
+#' @param verbose If `TRUE`, emit a message for each validation example.
+#'
+#' @return A data frame with one row per validation simulation and columns
+#'   `truth`, `lwr_cred_int`, `pred_mean`, `pred_median`, `pred_mode`, and
+#'   `upr_cred_int`.
+#' @export
+#'
+#' @examples
+#' \donttest{
+#' sim_stats <- data.frame(
+#'   Ne = c(100, 200, 500, 1000),
+#'   S1 = c(1, 2, 3, 4),
+#'   S2 = c(5, 6, 7, 8)
+#' )
+#' train_abc(
+#'   train_sample = sim_stats, val_sample = sim_stats,
+#'   outcomes = "Ne", summary_stats = c("S1", "S2"),
+#'   tol = 0.5, method = "rejection"
+#' )
+#' }
+train_abc <- function(train_sample, val_sample, outcomes, summary_stats, tol, method, verbose = FALSE) {
+
+  if (!requireNamespace("abc", quietly = TRUE)) {
+    stop("The abc package is required for train_abc(). Install it with install.packages('abc').")
+  }
+
+  # vectors to store results
+  lwr_results <- c()
+  median_results <- c()
+  mean_results <- c()
+  mode_results <- c()
+  upr_results <- c()
+
+  # subset frames to relevant metrics
+  train_outcomes <- train_sample[, outcomes]
+  train_stats <- train_sample[, summary_stats]
+  val_stats <- val_sample[, summary_stats]
+
+  # loop over validation data
+  for (i in 1:nrow(val_stats)) {
+    if (verbose) message("Validation example: ", i)
+
+    # get one validation simulation
+    val_target <- val_stats[i, ]
+
+    # run abc on validation sim; abc() and summary.abc() write to stdout with
+    # cat()/print(), which suppressMessages()/suppressWarnings() cannot touch,
+    # so divert stdout with capture.output() and use print = FALSE
+    utils::capture.output(
+      result <- suppressWarnings(suppressMessages(
+        abc::abc(val_target, train_outcomes, train_stats, tol, method)
+      )),
+      type = "output"
+    )
+    result_summary <- suppressWarnings(suppressMessages(
+      summary(result, print = FALSE)
+    ))
+
+    cred_int <- round(c(result_summary[[2]], result_summary[[6]]))
+    median_est <- round(result_summary[[3]])
+    mean_est <- round(result_summary[[4]])
+    mode_est <- round(result_summary[[5]])
+
+    # save prediction
+    lwr_results <- c(lwr_results, cred_int[1])
+    median_results <- c(median_results, median_est)
+    mean_results <- c(mean_results, mean_est)
+    mode_results <- c(mode_results, mode_est)
+    upr_results <- c(upr_results, cred_int[2])
+  }
+
+  return(
+    data.frame(
+      truth = val_sample[, outcomes],
+      lwr_cred_int = lwr_results,
+      pred_mean = mean_results,
+      pred_median = median_results,
+      pred_mode = mode_results,
+      upr_cred_int = upr_results
+    )
+  )
+}
