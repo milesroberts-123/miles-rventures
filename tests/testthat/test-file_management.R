@@ -48,3 +48,68 @@ test_that("read_paf parses a PAF file correctly", {
   expect_true(is.numeric(paf$mapq))
   expect_equal(paf$pident, c(290 / 300, 390 / 400, 50 / 100))
 })
+
+test_that("bind_files binds tables with custom column names and source ids", {
+  f1 <- tempfile(fileext = ".txt")
+  f2 <- tempfile(fileext = ".txt")
+  on.exit(unlink(c(f1, f2)))
+  writeLines("0.1\t0.9", f1)
+  writeLines("0.2\t0.8\n0.3\t0.7", f2)
+
+  bound <- bind_files(c(f1, f2), col_names = c("bray_curtis", "cosine"))
+
+  expect_equal(nrow(bound), 3)
+  expect_named(bound, c("source_file", "bray_curtis", "cosine"))
+  expect_equal(bound$source_file, c(f1, f2, f2))
+  expect_equal(bound$bray_curtis, c(0.1, 0.2, 0.3))
+  expect_s3_class(bound, "data.frame")
+})
+
+test_that("bind_files keeps file headers when col_names is NULL", {
+  f1 <- tempfile(fileext = ".csv")
+  f2 <- tempfile(fileext = ".csv")
+  on.exit(unlink(c(f1, f2)))
+  writeLines("a,b\n1,2", f1)
+  writeLines("a,b\n3,4", f2)
+
+  bound <- bind_files(c(f1, f2))
+
+  expect_named(bound, c("source_file", "a", "b"))
+  expect_equal(bound$a, c(1, 3))
+})
+
+test_that("bind_files omits the id column when id is NULL", {
+  f1 <- tempfile(fileext = ".txt")
+  on.exit(unlink(f1))
+  writeLines("1\t2", f1)
+
+  bound <- bind_files(f1, col_names = c("x", "y"), id = NULL)
+
+  expect_named(bound, c("x", "y"))
+})
+
+test_that("bind_files errors on missing files", {
+  good <- tempfile(fileext = ".txt")
+  on.exit(unlink(good))
+  writeLines("1\t2", good)
+
+  expect_error(
+    bind_files(c(good, "/nonexistent/path.txt")),
+    "File\\(s\\) not found: /nonexistent/path\\.txt"
+  )
+})
+
+test_that("bind_files autodetects delimiters via fread", {
+  f1 <- tempfile(fileext = ".csv")
+  on.exit(unlink(f1))
+  writeLines("1;2", f1)
+
+  bound <- bind_files(f1, col_names = c("x", "y"))
+
+  expect_equal(bound$x, 1)
+  expect_equal(bound$y, 2)
+})
+
+test_that("bind_files validates input type", {
+  expect_error(bind_files(list("a.txt")), "is.character\\(file_list\\) is not TRUE")
+})

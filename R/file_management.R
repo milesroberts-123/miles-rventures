@@ -90,3 +90,44 @@ read_paf <- function(file) {
     pident = nmatch / alen
   )
 }
+
+#' Read a list of files and bind their tables together
+#'
+#' Reads each file in `file_list` with [data.table::fread()] and binds the
+#' resulting tables row-wise into a single data frame. A source-file column
+#' (full paths, in the order given) is prepended unless `id = NULL`.
+#'
+#' @param file_list Character vector of file paths, e.g. the output of
+#'   [list.files()] with `full.names = TRUE`.
+#' @param col_names Optional character vector of column names passed to
+#'   `fread`'s `col.names`, overriding the headers in the files. `NULL`
+#'   keeps the file headers.
+#' @param id Name of the source-file column added to the result, holding
+#'   the full path of the file each row came from. `NULL` omits the column.
+#' @param ... Additional arguments passed to [data.table::fread()], e.g.
+#'   `sep`, `select`, or `header`.
+#'
+#' @return A data frame with one row per row of every input file, plus the
+#'   id column if `id` is not `NULL`.
+#' @export
+#'
+#' @examples
+#' f1 <- tempfile(fileext = ".txt")
+#' f2 <- tempfile(fileext = ".txt")
+#' writeLines("0.1\t0.9", f1)
+#' writeLines("0.2\t0.8", f2)
+#' bind_files(c(f1, f2), col_names = c("bray_curtis", "cosine"))
+bind_files <- function(file_list, col_names = NULL, id = "source_file", ...) {
+  stopifnot(is.character(file_list), length(file_list) > 0)
+  missing_files <- !file.exists(file_list)
+  if (any(missing_files)) {
+    stop("File(s) not found: ", paste(file_list[missing_files], collapse = ", "))
+  }
+  tables <- if (is.null(col_names)) {
+    lapply(file_list, data.table::fread, ...)
+  } else {
+    lapply(file_list, data.table::fread, col.names = col_names, ...)
+  }
+  names(tables) <- file_list
+  dplyr::bind_rows(tables, .id = id)
+}
