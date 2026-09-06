@@ -13,25 +13,22 @@
 #' @export
 corr_ci_autocorr <- function(x, y, conf = 0.95) {
 
-  # --- input handling: drop pairs with NA, check length ---------------------
+  # Drop pairs with missing values, then require a usable sample size
   ok <- stats::complete.cases(x, y)
   x <- x[ok]; y <- y[ok]
   n <- length(x)
   if (n < 4L) stop("Need at least 4 complete paired observations.")
 
-  # --- Pearson correlation --------------------------------------------------
   r <- stats::cor(x, y)
 
-  # --- lag-1 autocorrelation of each series ---------------------------------
+  # Lag-1 autocorrelation of each series
   rho_x <- stats::acf(x, lag.max = 1, plot = FALSE, demean = TRUE)$acf[2]
   rho_y <- stats::acf(y, lag.max = 1, plot = FALSE, demean = TRUE)$acf[2]
 
-  # --- effective sample size for two AR(1) processes ------------------------
-  #   N_eff = N * (1 - rho_x * rho_y) / (1 + rho_x * rho_y)
+  # Effective sample size for two AR(1) processes; cap at nominal N
   prod_rho <- rho_x * rho_y
   n_eff <- n * (1 - prod_rho) / (1 + prod_rho)
-  # Guard against pathological values; N_eff must exceed 3 for the SE below.
-  n_eff <- min(n_eff, n)            # cap at nominal N (negative prod_rho case)
+  n_eff <- min(n_eff, n)
   if (n_eff <= 3) {
     warning("Effective sample size <= 3; interval is unreliable.")
     return(list(
@@ -49,13 +46,13 @@ corr_ci_autocorr <- function(x, y, conf = 0.95) {
     ))
   }
 
-  # --- Fisher z-transform and CI -------------------------------------------
+  # Back-transform the Fisher-z interval to r-space
   z      <- atanh(r)
   se_z   <- 1 / sqrt(n_eff - 3)
   zcrit  <- stats::qnorm(1 - (1 - conf) / 2)
-  ci     <- tanh(z + c(-1, 1) * zcrit * se_z)   # back-transform to r-space
+  ci     <- tanh(z + c(-1, 1) * zcrit * se_z)
 
-  # --- significance test of H0: rho = 0, using N_eff ------------------------
+  # Significance test of H0: rho = 0, using N_eff
   t_stat <- r * sqrt((n_eff - 2) / (1 - r^2))
   df     <- n_eff - 2
   p_val  <- 2 * stats::pt(-abs(t_stat), df = df)
@@ -205,20 +202,21 @@ train_abc <- function(train_sample, val_sample, outcomes, summary_stats, tol, me
     stop("The abc package is required for train_abc(). Install it with install.packages('abc').")
   }
 
-  # vectors to store results
-  lwr_results <- c()
-  median_results <- c()
-  mean_results <- c()
-  mode_results <- c()
-  upr_results <- c()
-
   # subset frames to relevant metrics
   train_outcomes <- train_sample[, outcomes]
   train_stats <- train_sample[, summary_stats]
   val_stats <- val_sample[, summary_stats]
 
+  # Preallocate result vectors, one entry per validation simulation
+  n_val <- nrow(val_stats)
+  lwr_results <- numeric(n_val)
+  median_results <- numeric(n_val)
+  mean_results <- numeric(n_val)
+  mode_results <- numeric(n_val)
+  upr_results <- numeric(n_val)
+
   # loop over validation data
-  for (i in 1:nrow(val_stats)) {
+  for (i in seq_len(n_val)) {
     if (verbose) message("Validation example: ", i)
 
     # get one validation simulation
@@ -238,16 +236,13 @@ train_abc <- function(train_sample, val_sample, outcomes, summary_stats, tol, me
     ))
 
     cred_int <- round(c(result_summary[[2]], result_summary[[6]]))
-    median_est <- round(result_summary[[3]])
-    mean_est <- round(result_summary[[4]])
-    mode_est <- round(result_summary[[5]])
 
     # save prediction
-    lwr_results <- c(lwr_results, cred_int[1])
-    median_results <- c(median_results, median_est)
-    mean_results <- c(mean_results, mean_est)
-    mode_results <- c(mode_results, mode_est)
-    upr_results <- c(upr_results, cred_int[2])
+    lwr_results[i] <- cred_int[1]
+    median_results[i] <- round(result_summary[[3]])
+    mean_results[i] <- round(result_summary[[4]])
+    mode_results[i] <- round(result_summary[[5]])
+    upr_results[i] <- cred_int[2]
   }
 
   return(

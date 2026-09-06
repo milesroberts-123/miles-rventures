@@ -88,7 +88,7 @@ library(rventures)
 - `read_paf()` — read a PAF alignment file
 - `bind_files()` — read a list of files with `fread` and bind their tables row-wise, with a source-file column
 - `append_table()` — append a data frame to a file
-- `check_file_exists()` — stop with an informative error if a file is missing
+- `check_file_exists()` — delete a file left over from a previous run, if present
 
 ## Development
 

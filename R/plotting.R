@@ -115,10 +115,10 @@ plot_groups_pdf <- function(data, groupings, plot_fn, filepath, width = 8, heigh
 #'   color_label = "True value"
 #' )
 plot_predictions_truth_scatter <- function(predictions, truth, model_label,
-                                              truth_label, pred_label,
-                                              color_var, color_label) {
-  keep <- !(is.na(predictions) | is.nan(predictions) | is.infinite(predictions) |
-    is.na(truth) | is.nan(truth) | is.infinite(truth))
+                                           truth_label, pred_label,
+                                           color_var, color_label) {
+  keep <- !(is.na(predictions) | is.infinite(predictions) |
+    is.na(truth) | is.infinite(truth))
   predictions <- predictions[keep]
   truth <- truth[keep]
   color_var <- color_var[keep]

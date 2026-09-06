@@ -210,12 +210,11 @@ test_that("validate_af_dataset passes consistent objects and flags mismatches", 
   # colname check skipped when names are absent
   expect_true(validate_af_dataset(freq_matrix(unname(d$freq_mat)),
                                   d$coords, d$p0, d$meta))
-  # class enforcement
-  expect_error(validate_af_dataset(d$freq_mat, d$coords, d$p0, d$meta,
-                                   check_colnames = FALSE) &&
-                 validate_af_dataset(d$freq_mat, d$coords, p0_vec(d$p0),
-                                     sample_info(d$meta)),
-               NA)
+  # class enforcement: reclassing through the constructors keeps it passing
+  expect_true(validate_af_dataset(d$freq_mat, d$coords, d$p0, d$meta,
+                                  check_colnames = FALSE))
+  expect_true(validate_af_dataset(d$freq_mat, d$coords, p0_vec(d$p0),
+                                  sample_info(d$meta)))
 })
 
 test_that("extract_samples subsets columns, rebuilds names, attaches metadata", {
@@ -229,7 +228,6 @@ test_that("extract_samples subsets columns, rebuilds names, attaches metadata", 
     colnames(sub),
     paste(att$population, att$time_point, att$replicate, sep = "_")
   )
-  att <- attr(sub, "sample_info")
   expect_s3_class(att, "sample_info")
   expect_true(all(att$population == "AA"))
 

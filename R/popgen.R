@@ -519,17 +519,8 @@ sum_of_het <- function(x) {
 #' geom_pairwise_mean(c(1, 4, 9))
 geom_pairwise_mean <- function(my_vector) {
   stopifnot(length(my_vector) > 1, is.numeric(my_vector))
-  n <- length(my_vector)
-  var_sum <- 0
-  for (i in 1:(n - 1)) {
-    var_a <- my_vector[i]
-    for (j in (i + 1):n) {
-      var_b <- my_vector[j]
-      var_sum <- var_sum + sqrt(var_a * var_b)
-    }
-  }
-  var_mean <- var_sum / ((n^2 - n) / 2)
-  return(var_mean)
+  pairwise <- sqrt(outer(my_vector, my_vector))
+  mean(pairwise[upper.tri(pairwise)])
 }
 
 #' Allele frequency changes between adjacent generations
@@ -626,7 +617,6 @@ sign_permute_increments <- function(pdiff, procedure = "none", windows = NULL) {
   stopifnot(ncol(pdiff) >= 1, nrow(pdiff) >= 1)
   pdiff <- as.data.frame(pdiff)
   if (procedure == "window") {
-    # within a window, randomly multiply allele frequency change by +1 or -1
     stopifnot(!is.null(windows), length(windows) == nrow(pdiff))
     pdiff$window <- windows
     pdiff <- dplyr::group_by(pdiff, window)
@@ -636,18 +626,15 @@ sign_permute_increments <- function(pdiff, procedure = "none", windows = NULL) {
     pdiff <- dplyr::ungroup(pdiff)
     pdiff <- pdiff[, setdiff(names(pdiff), "window"), drop = FALSE]
   } else if (procedure == "cell") {
-    # randomly multiply every cell frequency change by +1 or -1
     pdiff <- dplyr::mutate(
       pdiff, dplyr::across(
         dplyr::where(is.numeric), ~ .x * sample(c(1, -1), dplyr::n(), replace = TRUE)
       )
     )
   } else if (procedure == "genome") {
-    # randomly multiply entire columns by +1 or -1
+    # one sign per column; the diagonal sign matrix flips all columns at once
     sign_permutations <- sample(c(-1, 1), size = ncol(pdiff), replace = TRUE)
-    # Create the diagonal matrix from vector
     P <- diag(sign_permutations)
-    # Perform matrix multiplication to flip all increments at once
     pdiff <- as.matrix(pdiff) %*% P
   } else if (procedure == "none") {
     # no flipping
@@ -682,17 +669,9 @@ standard_cov_by_het <- function(pmat, covmat) {
   stopifnot(ncol(pmat) == ncol(covmat))
   half_het_sums <- 0.5 * apply(pmat, MARGIN = 2, FUN = sum_of_het)
   stopifnot(all(half_het_sums > 0))
-  # standaridize variances
-  diag(covmat) <- diag(covmat) / half_het_sums
-  # standardize covariances
-  for (i in 1:nrow(covmat)) {
-    for (j in 1:ncol(covmat)) {
-      if (i != j) {
-        covmat[i, j] <- covmat[i, j] / half_het_sums[min(c(i, j))]
-      }
-    }
-  }
-  return(covmat)
+  # each variance (i, i) and covariance (i, j) is divided by the
+  # heterozygosity of the earlier of the two intervals
+  covmat / half_het_sums[pmin(row(covmat), col(covmat))]
 }
 
 #' Calculate covariances from allele frequency matrix
@@ -748,7 +727,7 @@ covmat_from_pmat <- function(pmat, n = NULL, correct_for_n = TRUE,
     if (length(n) != (ncol(covmat) + 1)) {
       stop("Should be a sample size for every time point.")
     }
-    ### ARCSIN SQRT TRANSFORMED FREQUENCIES ###
+    ### ARCSIN-SQRT TRANSFORMED FREQUENCIES ###
     if (input_asin_trans) {
       # check transformed data are actually input
       if (all(pmat[, 1] < pi)) {
@@ -819,12 +798,11 @@ covmat_from_pmat <- function(pmat, n = NULL, correct_for_n = TRUE,
 #' rolling_matrix_sum(matrix(1:9, nrow = 3))
 rolling_matrix_sum <- function(mat) {
   stopifnot(nrow(mat) == ncol(mat))
-  rolling_sum <- c()
+  rolling_sum <- numeric(ncol(mat))
   for (i in 1:ncol(mat)) {
-    rolling_sum <- c(rolling_sum, sum(mat[1:i, 1:i]))
+    rolling_sum[i] <- sum(mat[1:i, 1:i])
   }
-  stopifnot(length(rolling_sum) == ncol(mat))
-  return(rolling_sum)
+  rolling_sum
 }
 
 #' G statistic, corrected for selection increasing variance in allele
@@ -895,10 +873,14 @@ gt_from_covmat <- function(covmat) {
 
   sums_var <- cumsum(variances)
 
-  sums_cov <- c(0)
-  sums_abs_cov <- c(0)
-  sums_pos_cov <- c(0)
-  sums_neg_cov <- c(0)
+  sums_cov <- numeric(nrow(covmat))
+  sums_abs_cov <- numeric(nrow(covmat))
+  sums_pos_cov <- numeric(nrow(covmat))
+  sums_neg_cov <- numeric(nrow(covmat))
+  sums_cov[1] <- 0
+  sums_abs_cov[1] <- 0
+  sums_pos_cov[1] <- 0
+  sums_neg_cov[1] <- 0
   for (j in 2:nrow(covmat)) {
     cov_sub <- covariances[1:(((j - 1) * (j)) / 2)]
 
@@ -907,10 +889,10 @@ gt_from_covmat <- function(covmat) {
     sum_neg_cov <- 2 * sum(abs(cov_sub[(cov_sub < 0)]), na.rm = TRUE)
     sum_pos_cov <- 2 * sum(cov_sub[(cov_sub > 0)], na.rm = TRUE)
 
-    sums_cov <- c(sums_cov, sum_cov)
-    sums_abs_cov <- c(sums_abs_cov, sum_abs_cov)
-    sums_pos_cov <- c(sums_pos_cov, sum_pos_cov)
-    sums_neg_cov <- c(sums_neg_cov, sum_neg_cov)
+    sums_cov[j] <- sum_cov
+    sums_abs_cov[j] <- sum_abs_cov
+    sums_pos_cov[j] <- sum_pos_cov
+    sums_neg_cov[j] <- sum_neg_cov
   }
 
   result <- data.frame(
