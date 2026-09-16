@@ -12,6 +12,7 @@ An R package of convenience functions for use across RStudio projects.
   - [Population genetics](#population-genetics)
   - [Temporal-replicate toolkit](#temporal-replicate-toolkit)
   - [Dataset structures](#dataset-structures)
+  - [Gene expression](#gene-expression)
   - [File management](#file-management)
 - [Development](#development)
 
@@ -86,6 +87,13 @@ library(rventures)
 - `extract_samples()` — subset a freq_matrix by population/time/replicate with rebuilt column names
 - `switch_tracked_allele()` — randomly switch which allele is tracked in a freq_matrix/p0_vec pair, using a shared variant subset
 - `filter_fixations()` — drop variants starting near the absorbing boundaries (within tol of 0/1, or NA) and mark later fixation/loss entries NA, ready for `rm_na_after_na()`
+
+### Gene expression
+
+- `expr_matrix()` — validated G x S gene-expression matrix (G genes x S samples)
+- `expr_sample_meta()` — validated sample metadata table (S samples x any number of annotation columns)
+- `tau()` — cell-type specificity index of an expression vector (0 = ubiquitous, 1 = single sample), with NA-handling modes
+- `mean_no_zeros()` — mean expression conditioned on expression above a threshold
 
 ### File management
 
