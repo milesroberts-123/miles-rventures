@@ -82,6 +82,7 @@ library(rventures)
 - `sample_info()` — validated S x 4 population/time/replicate/sample-size metadata
 - `validate_af_dataset()` — cross-check the four objects for consistent dimensions
 - `extract_samples()` — subset a freq_matrix by population/time/replicate with rebuilt column names
+- `switch_tracked_allele()` — randomly switch which allele is tracked in a freq_matrix/p0_vec pair, using a shared variant subset
 
 ### File management
 

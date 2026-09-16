@@ -503,6 +503,64 @@ extract_samples <- function(freq_mat, sample_meta, population = NULL,
   out
 }
 
+#' Randomly switch the tracked allele
+#'
+#' Flips the tracked allele (`1 - x`) for a random subset of variants,
+#' applying the same subset to both a `freq_matrix` and a matched `p0_vec`.
+#' NA entries pass through unchanged (1 - NA = NA).
+#'
+#' @param freq_mat A `freq_matrix` object with L rows (variants).
+#' @param p0 A `p0_vec` object of length L.
+#' @param idx Optional logical vector of length L selecting which variants
+#'   to switch (no NAs). Default NULL samples a fresh 50/50 index; pass an
+#'   index to reproduce a switch or coordinate it across datasets.
+#'
+#' @return A list with `freq_mat` and `p0`, the tracked allele switched on
+#'   the shared subset of variants.
+#' @export
+#'
+#' @examples
+#' set.seed(1)
+#' fm <- freq_matrix(matrix(c(0.1, 0.9, 0.3, 0.7), nrow = 2))
+#' p0 <- p0_vec(c(0.4, 0.6))
+#' out <- switch_tracked_allele(fm, p0)
+#' out$p0
+switch_tracked_allele <- function(freq_mat, p0, idx = NULL) {
+  if (!inherits(freq_mat, "freq_matrix")) {
+    stop("freq_mat must be a freq_matrix object.")
+  }
+  if (!inherits(p0, "p0_vec")) {
+    stop("p0 must be a p0_vec object.")
+  }
+  L <- nrow(freq_mat)
+  if (L != length(p0)) {
+    stop(sprintf(
+      "Variant count mismatch: freq_matrix has %d rows, p0_vec has %d entries.",
+      L, length(p0)
+    ))
+  }
+  if (is.null(idx)) {
+    idx <- sample(c(TRUE, FALSE), size = L, replace = TRUE)
+  } else {
+    if (!is.logical(idx) || anyNA(idx)) {
+      stop("idx must be a logical vector with no NA values.")
+    }
+    if (length(idx) != L) {
+      stop(sprintf(
+        "idx must have one entry per variant: got %d, expected %d.",
+        length(idx), L
+      ))
+    }
+  }
+  fm <- unclass(freq_mat)
+  fm[idx, ] <- 1 - fm[idx, ]
+  class(fm) <- c("freq_matrix", class(fm))
+  pv <- unclass(p0)
+  pv[idx] <- 1 - pv[idx]
+  class(pv) <- c("p0_vec", class(pv))
+  list(freq_mat = fm, p0 = pv)
+}
+
 # ---------------------------------------------------------------------------
 # Temporal-replicate popgen: frequency changes, covariance, and G statistics
 # ---------------------------------------------------------------------------

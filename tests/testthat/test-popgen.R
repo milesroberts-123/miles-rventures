@@ -148,6 +148,81 @@ test_that("p0_vec coerces single-column matrices and validates", {
   expect_error(p0_vec("a"), "numeric vector")
 })
 
+test_that("switch_tracked_allele flips a shared random subset of variants", {
+  set.seed(42)
+  d <- make_test_dataset(L = 50)
+  fm_orig <- unclass(d$freq_mat)
+  p0_orig <- unclass(d$p0)
+  out <- switch_tracked_allele(d$freq_mat, d$p0)
+  expect_s3_class(out$freq_mat, "freq_matrix")
+  expect_s3_class(out$p0, "p0_vec")
+  # derive switched rows from p0, then verify freq_mat flips exactly those
+  changed_rows <- which(out$p0 != p0_orig)
+  expect_true(length(changed_rows) > 0 && length(changed_rows) < 50)
+  expect_true(all(out$p0[changed_rows] == 1 - p0_orig[changed_rows]))
+  expect_true(all(out$p0[-changed_rows] == p0_orig[-changed_rows]))
+  expect_identical(unclass(out$freq_mat)[changed_rows, ],
+                   1 - fm_orig[changed_rows, ])
+  expect_identical(unclass(out$freq_mat)[-changed_rows, ],
+                   fm_orig[-changed_rows, ])
+  # colnames and dimnames survive
+  expect_identical(colnames(out$freq_mat), colnames(d$freq_mat))
+  expect_identical(dim(out$freq_mat), dim(d$freq_mat))
+})
+
+test_that("switch_tracked_allele respects a user-supplied idx", {
+  d <- make_test_dataset(L = 5)
+  fm_orig <- unclass(d$freq_mat)
+  p0_orig <- unclass(d$p0)
+  idx <- c(TRUE, FALSE, TRUE, FALSE, TRUE)
+  out1 <- switch_tracked_allele(d$freq_mat, d$p0, idx = idx)
+  out2 <- switch_tracked_allele(d$freq_mat, d$p0, idx = idx)
+  expect_identical(unclass(out1$freq_mat), unclass(out2$freq_mat))
+  expect_identical(unclass(out1$p0), unclass(out2$p0))
+  expect_identical(unclass(out1$freq_mat)[idx, ], 1 - fm_orig[idx, ])
+  expect_identical(unclass(out1$freq_mat)[!idx, ], fm_orig[!idx, ])
+  expect_identical(unclass(out1$p0)[idx], 1 - p0_orig[idx])
+  expect_identical(unclass(out1$p0)[!idx], p0_orig[!idx])
+})
+
+test_that("switch_tracked_allele passes NA frequencies through", {
+  m <- matrix(c(0.2, 0.8, NA, 0.6), nrow = 2)
+  fm <- freq_matrix(m)
+  p0 <- p0_vec(c(0.3, 0.7))
+  out <- switch_tracked_allele(fm, p0, idx = c(TRUE, FALSE))
+  expect_true(is.na(out$freq_mat[1, 2]))
+  expect_identical(unclass(out$freq_mat)[2, ], m[2, ])
+  expect_identical(out$p0, p0_vec(c(0.7, 0.7)))
+})
+
+test_that("switch_tracked_allele validates inputs", {
+  d <- make_test_dataset(L = 5)
+  expect_error(
+    switch_tracked_allele(unclass(d$freq_mat), d$p0),
+    "freq_mat must be a freq_matrix object"
+  )
+  expect_error(
+    switch_tracked_allele(d$freq_mat, unclass(d$p0)),
+    "p0 must be a p0_vec object"
+  )
+  expect_error(
+    switch_tracked_allele(d$freq_mat, p0_vec(d$p0[1:3])),
+    "Variant count mismatch"
+  )
+  expect_error(
+    switch_tracked_allele(d$freq_mat, d$p0, idx = c(1, 0, 1, 0, 1)),
+    "logical"
+  )
+  expect_error(
+    switch_tracked_allele(d$freq_mat, d$p0, idx = rep(TRUE, 4)),
+    "one entry per variant"
+  )
+  expect_error(
+    switch_tracked_allele(d$freq_mat, d$p0, idx = c(TRUE, NA, TRUE, FALSE, TRUE)),
+    "no NA"
+  )
+})
+
 test_that("sample_info coerces column types and validates", {
   d <- data.frame(
     population = c("AA", "BB"),
