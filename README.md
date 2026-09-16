@@ -83,6 +83,7 @@ library(rventures)
 - `validate_af_dataset()` — cross-check the four objects for consistent dimensions
 - `extract_samples()` — subset a freq_matrix by population/time/replicate with rebuilt column names
 - `switch_tracked_allele()` — randomly switch which allele is tracked in a freq_matrix/p0_vec pair, using a shared variant subset
+- `filter_fixations()` — drop variants starting near the absorbing boundaries (within tol of 0/1, or NA) and mark later fixation/loss entries NA, ready for `rm_na_after_na()`
 
 ### File management
 

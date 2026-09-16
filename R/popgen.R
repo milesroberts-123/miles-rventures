@@ -561,6 +561,83 @@ switch_tracked_allele <- function(freq_mat, p0, idx = NULL) {
   list(freq_mat = fm, p0 = pv)
 }
 
+#' Filter variants at absorbing allele frequency boundaries
+#'
+#' Removes variants that start near fixation or loss from a paired
+#' `freq_matrix` and `p0_vec` (and optionally `snp_coords`): a variant is
+#' dropped if its initial frequency is within `tol` of 0 or 1, or is NA.
+#' Measurement error means such "boundary" frequencies may not be exactly
+#' 0 or 1, yet they should be ignored for replicate covariance analyses.
+#' Entries of the kept frequency matrix that sit at or beyond the boundaries
+#' (`x <= 0` or `x >= 1`, i.e. exact fixation/loss in a validated
+#' `freq_matrix`) are marked NA so a follow-up [rm_na_after_na()] call per
+#' replicate truncates each trajectory at its first fixation/loss.
+#'
+#' @param freq_mat A `freq_matrix` object with L rows (variants).
+#' @param p0 A `p0_vec` object of length L.
+#' @param snp_coords Optional `snp_coords` object with L rows, subset along
+#'   with the other objects so [validate_af_dataset()] stays coherent.
+#' @param tol Single non-negative number: the smallest initial frequency
+#'   considered measurable (e.g. `1 / (2N)`); variants with `p0 < tol` or
+#'   `p0 > 1 - tol` are dropped. Required, no default.
+#'
+#' @return A list with `freq_mat`, `p0`, and `snp_coords` (NULL if not
+#'   supplied), subset to variants with usable initial frequencies and with
+#'   boundary values in the frequency matrix marked NA.
+#' @export
+#'
+#' @examples
+#' fm <- freq_matrix(matrix(c(0.0, 0.4, 1.0, 0.6), nrow = 2))
+#' p0 <- p0_vec(c(1 / 231, 0.5))
+#' coords <- snp_coords(data.frame(chrom = c("1", "1"), pos = c(100, 200)))
+#' out <- filter_fixations(fm, p0, coords, tol = 1 / 231)
+#' out$p0
+#' out$freq_mat # the fixed/lost entries became NA
+filter_fixations <- function(freq_mat, p0, snp_coords = NULL, tol) {
+  if (!inherits(freq_mat, "freq_matrix")) {
+    stop("freq_mat must be a freq_matrix object.")
+  }
+  if (!inherits(p0, "p0_vec")) {
+    stop("p0 must be a p0_vec object.")
+  }
+  if (!is.null(snp_coords) && !inherits(snp_coords, "snp_coords")) {
+    stop("snp_coords must be a snp_coords object.")
+  }
+  L <- nrow(freq_mat)
+  if (L != length(p0)) {
+    stop(sprintf(
+      "Variant count mismatch: freq_matrix has %d rows, p0_vec has %d entries.",
+      L, length(p0)
+    ))
+  }
+  if (!is.null(snp_coords) && nrow(snp_coords) != L) {
+    stop(sprintf(
+      "Variant count mismatch: freq_matrix has %d rows, snp_coords has %d rows.",
+      L, nrow(snp_coords)
+    ))
+  }
+  if (!is.numeric(tol) || length(tol) != 1 || !is.finite(tol) || tol < 0) {
+    stop("tol must be a single non-negative number.")
+  }
+
+  keep <- !is.na(p0) & p0 >= tol & p0 <= 1 - tol
+  if (!any(keep)) {
+    stop("All variants are fixed, lost, or NA in p0: nothing to keep.")
+  }
+
+  fm <- unclass(freq_mat)[keep, , drop = FALSE]
+  fm[fm <= 0 | fm >= 1] <- NA
+  class(fm) <- c("freq_matrix", class(fm))
+  pv <- unclass(p0)[keep]
+  class(pv) <- c("p0_vec", class(pv))
+  out_coords <- NULL
+  if (!is.null(snp_coords)) {
+    out_coords <- snp_coords[keep, , drop = FALSE]
+    class(out_coords) <- c("snp_coords", class(out_coords))
+  }
+  list(freq_mat = fm, p0 = pv, snp_coords = out_coords)
+}
+
 # ---------------------------------------------------------------------------
 # Temporal-replicate popgen: frequency changes, covariance, and G statistics
 # ---------------------------------------------------------------------------

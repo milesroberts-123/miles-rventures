@@ -223,6 +223,113 @@ test_that("switch_tracked_allele validates inputs", {
   )
 })
 
+test_that("filter_fixations drops boundary and NA p0 variants", {
+  m <- matrix(c(
+    0.0, 0.3,
+    0.4, 0.5,
+    0.1, 0.2,
+    0.6, 0.7,
+    0.9, 0.9,
+    0.8, 0.9
+  ), nrow = 6, byrow = TRUE)
+  fm <- freq_matrix(m)
+  # exact tol kept (inclusive, as in the reference workflow); above tol dropped
+  p0 <- p0_vec(c(0, 0.4, 1 / 231, 0.6, 0.999, NA))
+  out <- filter_fixations(fm, p0, tol = 1 / 231)
+  expect_s3_class(out$freq_mat, "freq_matrix")
+  expect_s3_class(out$p0, "p0_vec")
+  expect_identical(length(out$p0), 3L)
+  expect_identical(unclass(out$p0), c(0.4, 1 / 231, 0.6))
+  expect_identical(unclass(out$freq_mat), m[2:4, , drop = FALSE])
+  # snp_coords not supplied -> NULL
+  expect_null(out$snp_coords)
+})
+
+test_that("filter_fixations marks boundary entries NA in kept rows", {
+  m <- matrix(c(
+    0.0,   0.4, 0.4,
+    1.0,   0.6, 0.6,
+    0.001, 0.5, 0.5
+  ), nrow = 3, byrow = TRUE)
+  fm <- freq_matrix(m)
+  p0 <- p0_vec(c(0.5, 0.5, 0.5))
+  out <- filter_fixations(fm, p0, tol = 1 / 1000)
+  expect_true(is.na(out$freq_mat[1, 1]))
+  expect_true(is.na(out$freq_mat[2, 1]))
+  expect_identical(unclass(out$freq_mat)[3, 1], 0.001)
+  expect_identical(unclass(out$freq_mat)[, 2:3], m[, 2:3])
+})
+
+test_that("filter_fixations subsets snp_coords along with rows", {
+  m <- matrix(c(0.0, 0.5, 0.9), nrow = 3)
+  fm <- freq_matrix(m)
+  p0 <- p0_vec(c(0, 0.5, 0.8))
+  coords <- snp_coords(data.frame(chrom = c("1", "1", "2"), pos = c(100, 200, 300)))
+  out <- filter_fixations(fm, p0, coords, tol = 1 / 231)
+  expect_s3_class(out$snp_coords, "snp_coords")
+  expect_identical(nrow(out$snp_coords), 2L)
+  expect_identical(out$snp_coords$POS, c(200, 300))
+})
+
+test_that("filter_fixations validates inputs", {
+  d <- make_test_dataset(L = 5)
+  expect_error(
+    filter_fixations(unclass(d$freq_mat), d$p0, tol = 0.01),
+    "freq_mat must be a freq_matrix object"
+  )
+  expect_error(
+    filter_fixations(d$freq_mat, unclass(d$p0), tol = 0.01),
+    "p0 must be a p0_vec object"
+  )
+  expect_error(
+    filter_fixations(d$freq_mat, d$p0, unclass(d$coords), tol = 0.01),
+    "snp_coords must be a snp_coords object"
+  )
+  expect_error(
+    filter_fixations(d$freq_mat, p0_vec(d$p0[1:3]), tol = 0.01),
+    "Variant count mismatch"
+  )
+  expect_error(
+    filter_fixations(d$freq_mat, d$p0, d$coords[1:2, ], tol = 0.01),
+    "Variant count mismatch"
+  )
+  expect_error(
+    filter_fixations(d$freq_mat, d$p0, tol = "a"),
+    "single non-negative number"
+  )
+  expect_error(
+    filter_fixations(d$freq_mat, d$p0, tol = c(0.01, 0.02)),
+    "single non-negative number"
+  )
+  expect_error(
+    filter_fixations(d$freq_mat, d$p0, tol = NA),
+    "single non-negative number"
+  )
+  expect_error(
+    filter_fixations(d$freq_mat, d$p0, tol = -0.01),
+    "single non-negative number"
+  )
+  expect_error(
+    filter_fixations(d$freq_mat, d$p0, tol = Inf),
+    "single non-negative number"
+  )
+})
+
+test_that("filter_fixations errors when all variants are dropped", {
+  m <- matrix(c(0.0, 1.0, 1 / 231, 0.5), nrow = 2)
+  fm <- freq_matrix(m)
+  p0 <- p0_vec(c(0, 0.0001))
+  expect_error(
+    filter_fixations(fm, p0, tol = 1 / 231),
+    "nothing to keep"
+  )
+  p0_na <- p0_vec(c(NA_real_, NA_real_))
+  expect_error(
+    filter_fixations(freq_matrix(matrix(c(0.5, 0.5), nrow = 2)), p0_na, tol = 0.01),
+    "nothing to keep"
+  )
+})
+
 test_that("sample_info coerces column types and validates", {
   d <- data.frame(
     population = c("AA", "BB"),
