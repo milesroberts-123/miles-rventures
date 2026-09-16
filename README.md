@@ -89,6 +89,7 @@ library(rventures)
 - `bind_files()` — read a list of files with `fread` and bind their tables row-wise, with a source-file column
 - `append_table()` — append a data frame to a file
 - `check_file_exists()` — delete a file left over from a previous run, if present
+- `ensure_parent_dir()` — create the parent folder structure of a target file path, if missing
 
 ## Development
 

@@ -131,3 +131,32 @@ bind_files <- function(file_list, col_names = NULL, id = "source_file", ...) {
   names(tables) <- file_list
   dplyr::bind_rows(tables, .id = id)
 }
+
+#' Create the parent directories of a target file path, if missing
+#'
+#' Takes the path to a target file, extracts its folder portion with
+#' [base::dirname()], and creates the full folder structure with
+#' [base::dir.create()] if it does not yet exist. Useful before writing
+#' outputs into a not-yet-existing nested directory.
+#'
+#' @param file_path Path to the target file. Only the folder portion is
+#'   created; the file itself is left untouched.
+#'
+#' @return Invisibly, `TRUE` if the folder structure was created, `FALSE` if
+#'   it already existed.
+#' @export
+#'
+#' @examples
+#' target <- file.path(tempdir(), "nested", "data_results", "output.csv")
+#' ensure_parent_dir(target)   # TRUE: folders created
+#' ensure_parent_dir(target)   # FALSE: folders already exist
+ensure_parent_dir <- function(file_path) {
+  stopifnot(is.character(file_path), length(file_path) == 1)
+  folder_path <- dirname(file_path)
+  if (!dir.exists(folder_path)) {
+    dir.create(folder_path, recursive = TRUE, showWarnings = FALSE)
+    invisible(TRUE)
+  } else {
+    invisible(FALSE)
+  }
+}

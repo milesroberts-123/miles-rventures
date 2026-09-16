@@ -113,3 +113,30 @@ test_that("bind_files autodetects delimiters via fread", {
 test_that("bind_files validates input type", {
   expect_error(bind_files(list("a.txt")), "is.character\\(file_list\\) is not TRUE")
 })
+
+test_that("ensure_parent_dir creates nested folders and is idempotent", {
+  base <- tempfile()
+  target <- file.path(base, "nested", "data_results", "output.csv")
+  on.exit(unlink(base, recursive = TRUE))
+
+  expect_false(dir.exists(dirname(target)))
+  first <- ensure_parent_dir(target)
+  expect_true(dir.exists(dirname(target)))
+  expect_equal(class(first), class(TRUE))  # logical, invisible
+  expect_true(first)
+
+  second <- ensure_parent_dir(target)
+  expect_false(second)
+  expect_true(dir.exists(dirname(target)))
+})
+
+test_that("ensure_parent_dir handles plain file names in the working dir", {
+  # dirname("f.csv") == "." which already exists
+  expect_false(ensure_parent_dir("f.csv"))
+})
+
+test_that("ensure_parent_dir validates input", {
+  expect_error(ensure_parent_dir(123), "is.character\\(file_path\\) is not TRUE")
+  expect_error(ensure_parent_dir(c("a.csv", "b.csv")),
+               "length\\(file_path\\) == 1 is not TRUE")
+})

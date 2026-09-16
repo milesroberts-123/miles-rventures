@@ -69,7 +69,7 @@ save_plot <- function(plot_obj, plot_name, date, plot_base_dir, height, width) {
 #' )
 #' }
 plot_groups_pdf <- function(data, groupings, plot_fn, filepath, width = 8, height = 6) {
-  dir.create(dirname(filepath), recursive = TRUE, showWarnings = FALSE)
+  ensure_parent_dir(filepath)
 
   data_list <- split(data, data[groupings], drop = TRUE)
 
