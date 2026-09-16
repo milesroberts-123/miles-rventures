@@ -1243,3 +1243,191 @@ covmat_pop_pair <- function(pmat1, pmat2, pop1, pop2, gen0) {
 
   return(mean(bw_pop_cov) / mean_pair_std)
 }
+
+#' Feder-style t-test of allele-frequency changes, pooled across replicates
+#'
+#' For each population, computes standardized allele-frequency changes
+#' between adjacent time points, `y = (p_t' - p_t) / sqrt(2 * p_t * (1 - p_t)
+#' * dt)` where `dt` is the generation gap and `p_t` is the frequency at the
+#' previous time point (the shared initial frequencies `p0` serve as the
+#' baseline for the first interval), pools the `y` values of a variant across
+#' all time points and replicates of the population, and runs a one-sample
+#' t-test of `H0: ybar = 0` per variant. Adapted from a chunked allele
+#' frequency processing script of the grenenet-phase2 project (Feder et al.
+#' style t-test of temporal allele-frequency change).
+#'
+#' @param freq_mat A `freq_matrix` object: L variants (rows) x S samples
+#'   (columns), with column names `pop_time_rep` matching `sample_meta` (as
+#'   built by [sample_info()]).
+#' @param p0 A `p0_vec` object of length L: shared allele frequencies at
+#'   generation 0, used as the baseline frequency of the first interval.
+#' @param sample_meta A `sample_info` object with S rows, matching the
+#'   columns of `freq_mat` in order.
+#' @param snp_coords Optional `snp_coords` object with L rows, providing the
+#'   `CHROM` and `POS` output columns.
+#' @param alternative Character string, one of `"two.sided"` (default),
+#'   `"less"`, or `"greater"`: the alternative hypothesis of the t-test.
+#'
+#' @return A data.frame with one row per variant and population, with columns
+#'   `population`, `CHROM`, `POS` (the latter two only if `snp_coords` is
+#'   supplied), `ybar` (mean standardized allele-frequency change),
+#'   `s2` (sample variance of the pooled changes), `n` (number of non-NA
+#'   changes pooled across time points and replicates), `df` (`n - 1`),
+#'   `tvalue`, and `pvalue`. Variants without usable changes in a population
+#'   get `NA` for the statistic columns.
+#' @export
+#'
+#' @details
+#' The test pools across adjacent intervals and replicates, so `df` equals
+#' the total number of non-NA allele-frequency increments of the population
+#' (across all time points and replicates) minus 1. Groups with fewer than
+#' two usable changes have an undefined variance and yield `NA` statistics.
+#' Frequencies of exactly 0 or 1 make the standardization denominator zero;
+#' such boundary variants should be removed upstream with
+#' [filter_fixations()]. The function is pure: to process a large CSV in
+#' batches, first convert it to a parquet dataset with [csv_to_parquet()],
+#' then apply this function per batch and append the results.
+#'
+#' @examples
+#' set.seed(1)
+#' L <- 5
+#' meta <- rbind(expand.grid(population = "AA", time_point = c(0, 1, 2),
+#'                           replicate = c("R1", "R2")),
+#'               expand.grid(population = "BB", time_point = c(0, 1, 2),
+#'                           replicate = "R1"))
+#' meta$sample_size <- 30
+#' meta <- meta[order(meta$population, meta$time_point, meta$replicate), ]
+#' fm <- freq_matrix(matrix(runif(L * nrow(meta)), nrow = L,
+#'                          dimnames = list(NULL, paste(meta$population,
+#'                              meta$time_point, meta$replicate, sep = "_"))))
+#' p0 <- p0_vec(runif(L, 0.2, 0.8))
+#' feder_t_test(fm, p0, sample_info(meta))
+feder_t_test <- function(freq_mat, p0, sample_meta, snp_coords = NULL,
+                         alternative = c("two.sided", "less", "greater")) {
+  alternative <- match.arg(alternative)
+  if (!inherits(freq_mat, "freq_matrix")) {
+    stop("freq_mat must be a freq_matrix object.")
+  }
+  if (!inherits(p0, "p0_vec")) {
+    stop("p0 must be a p0_vec object.")
+  }
+  if (!inherits(sample_meta, "sample_info")) {
+    stop("sample_meta must be a sample_info object.")
+  }
+  if (!is.null(snp_coords) && !inherits(snp_coords, "snp_coords")) {
+    stop("snp_coords must be a snp_coords object.")
+  }
+  L <- nrow(freq_mat)
+  S <- ncol(freq_mat)
+  if (L != length(p0)) {
+    stop(sprintf(
+      "Variant count mismatch: freq_matrix has %d rows, p0_vec has %d entries.",
+      L, length(p0)
+    ))
+  }
+  if (S != nrow(sample_meta)) {
+    stop(sprintf(
+      "Sample count mismatch: freq_matrix has %d columns, sample_info has %d rows.",
+      S, nrow(sample_meta)
+    ))
+  }
+  if (!is.null(snp_coords) && nrow(snp_coords) != L) {
+    stop(sprintf(
+      "Variant count mismatch: freq_matrix has %d rows, snp_coords has %d rows.",
+      L, nrow(snp_coords)
+    ))
+  }
+
+  fm <- unclass(freq_mat)
+  meta <- sample_meta[, c("population", "time_point", "replicate",
+                          "sample_size"), drop = FALSE]
+  times <- sort(unique(meta$time_point))
+  times <- times[times > 0]
+  if (length(times) < 1) {
+    stop("sample_info has no positive time points: no intervals to test.")
+  }
+  anchors <- c(0, times) # 0 = the shared p0 baseline
+
+  out_rows <- list()
+  row_i <- 0
+  for (pop in unique(meta$population)) {
+    pop_meta <- meta[meta$population == pop, , drop = FALSE]
+
+    # Stack standardized changes: one matrix column per interval-replicate
+    y_pool <- matrix(numeric(0), nrow = L)
+    for (i in seq_along(anchors)[-1]) {
+      t_curr <- anchors[i]
+      t_prev <- anchors[i - 1]
+      dt <- t_curr - t_prev
+      meta_curr <- pop_meta[pop_meta$time_point == t_curr, , drop = FALSE]
+      if (nrow(meta_curr) == 0) next
+      curr_idx <- which(meta$population == pop & meta$time_point == t_curr)
+      if (t_prev == 0) {
+        # p0 baseline: pair every replicate at t_curr with the shared p0
+        prev_mat <- matrix(rep(unclass(p0), length(curr_idx)), nrow = L)
+        denom <- sqrt(2 * unclass(p0) * (1 - unclass(p0)) * dt)
+        y_new <- (fm[, curr_idx, drop = FALSE] - prev_mat) / denom
+      } else {
+        # only replicates sampled at both interval endpoints
+        meta_prev <- pop_meta[pop_meta$time_point == t_prev, , drop = FALSE]
+        reps <- intersect(meta_curr$replicate, meta_prev$replicate)
+        if (length(reps) == 0) next
+        prev_idx <- which(meta$population == pop & meta$time_point == t_prev &
+                          meta$replicate %in% reps)
+        # align replicate order between the two endpoint column sets
+        curr_idx <- curr_idx[match(reps, meta[curr_idx, "replicate"])]
+        prev_idx <- prev_idx[match(reps, meta[prev_idx, "replicate"])]
+        curr_idx <- curr_idx[match(reps, meta[curr_idx, "replicate"])]
+        prev_mat <- fm[, prev_idx, drop = FALSE]
+        denom <- sqrt(2 * prev_mat * (1 - prev_mat) * dt)
+        y_new <- (fm[, curr_idx, drop = FALSE] - prev_mat) / denom
+      }
+      y_pool <- cbind(y_pool, y_new)
+    }
+    if (ncol(y_pool) == 0) next
+
+    ybar <- rowMeans(y_pool, na.rm = TRUE)
+    s2 <- matrixStats_rowVars(y_pool)
+    n <- rowSums(!is.na(y_pool))
+    df <- n - 1
+    tvalue <- ybar / sqrt(s2 / n)
+    if (alternative == "two.sided") {
+      pvalue <- 2 * stats::pt(-abs(tvalue), df = df)
+    } else if (alternative == "less") {
+      pvalue <- stats::pt(tvalue, df = df)
+    } else {
+      pvalue <- stats::pt(tvalue, df = df, lower.tail = FALSE)
+    }
+
+    row_i <- row_i + 1
+    out_rows[[row_i]] <- data.frame(
+      population = pop,
+      ybar = ybar, s2 = s2, n = n, df = df, tvalue = tvalue, pvalue = pvalue
+    )
+  }
+  if (row_i == 0) {
+    stop("No population has a usable time interval: nothing to test.")
+  }
+  out <- do.call(rbind.data.frame, out_rows)
+  if (!is.null(snp_coords)) {
+    n_pops <- length(unique(out$population))
+    out$CHROM <- rep(snp_coords$CHROM, times = n_pops)
+    out$POS <- rep(snp_coords$POS, times = n_pops)
+    out <- out[, c("population", "CHROM", "POS",
+                   setdiff(names(out), c("population", "CHROM", "POS"))),
+               drop = FALSE]
+  }
+  out
+}
+
+# Row-wise variance (denominator n - 1) of a matrix, NA-aware, base R only
+matrixStats_rowVars <- function(m) {
+  n <- rowSums(!is.na(m))
+  means <- rowMeans(m, na.rm = TRUE)
+  sq <- (m - means)^2
+  sums <- rowSums(sq, na.rm = TRUE)
+  out <- rep(NA_real_, nrow(m))
+  ok <- n > 1
+  out[ok] <- sums[ok] / (n[ok] - 1)
+  out
+}

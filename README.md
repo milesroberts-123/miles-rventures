@@ -73,6 +73,7 @@ library(rventures)
 - `conv_cor_wn_env()` — convergence correlation among replicates within an environment
 - `replicate_gt()` — variance/covariance partition by replicate and time labels
 - `covmat_pop_pair()` — mean standardized covariance between a pair of populations
+- `feder_t_test()` — Feder-style one-sample t-test of standardized allele-frequency changes, pooled across time points and replicates per population
 
 ### Dataset structures
 

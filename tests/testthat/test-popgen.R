@@ -858,3 +858,202 @@ test_that("dataset kit integrates with temporal functions end to end", {
   expect_equal(res$n_var, 2)
   expect_equal(res$n_covar, 1)
 })
+
+# ---------------------------------------------------------------------------
+# feder_t_test
+# ---------------------------------------------------------------------------
+
+test_that("feder_t_test matches a hand-computed pooled t-test", {
+  meta <- data.frame(
+    population = c("AA", "AA", "AA", "AA", "BB", "BB", "BB"),
+    time_point = c(0L, 1L, 2L, 0L, 0L, 1L, 2L),
+    replicate = c("R1", "R1", "R1", "R2", "R1", "R1", "R1"),
+    sample_size = 30L
+  )
+  set.seed(1)
+  L <- 2
+  fm <- freq_matrix(matrix(runif(L * 7, 0.1, 0.9), nrow = L,
+                           dimnames = list(NULL, paste(meta$population,
+                               meta$time_point, meta$replicate, sep = "_"))))
+  p0 <- p0_vec(c(0.4, 0.6))
+
+  res <- feder_t_test(fm, p0, sample_info(meta))
+
+  # AA: R1 has t0 -> t1 -> t2; R2 sampled only at t0 contributes nothing.
+  # Anchors 0, 1, 2 with dt = 1 between adjacent anchors.
+  p <- unclass(fm)
+  y1 <- (p[, "AA_1_R1"] - p0) / sqrt(2 * p0 * (1 - p0) * 1)
+  y2 <- (p[, "AA_2_R1"] - p[, "AA_1_R1"]) /
+    sqrt(2 * p[, "AA_1_R1"] * (1 - p[, "AA_1_R1"]) * 1)
+  yall <- cbind(y1, y2)
+  aa <- res[res$population == "AA", ]
+  expect_equal(aa$ybar, rowMeans(yall))
+  expect_equal(aa$s2, apply(yall, 1, var))
+  expect_equal(aa$n, rep(2, L))
+  expect_equal(aa$df, rep(1, L))
+  expect_equal(aa$tvalue, rowMeans(yall) / sqrt(apply(yall, 1, var) / 2))
+  expect_equal(aa$pvalue, 2 * stats::pt(-abs(aa$tvalue), df = 1))
+
+  # BB mirrors the single-replicate structure
+  expect_equal(res$n[res$population == "BB"], rep(2, L))
+  expect_equal(nrow(res), 2 * L)
+})
+
+test_that("feder_t_test agrees with stats::t.test on pooled increments", {
+  meta <- data.frame(
+    population = rep("AA", 6),
+    time_point = c(0L, 0L, 1L, 1L, 2L, 2L),
+    replicate = c("R1", "R2", "R1", "R2", "R1", "R2"),
+    sample_size = 30L
+  )
+  set.seed(42)
+  L <- 3
+  fm_raw <- matrix(runif(L * 6, 0.1, 0.9), nrow = L)
+  fm <- freq_matrix(`colnames<-`(fm_raw, paste(meta$population,
+      meta$time_point, meta$replicate, sep = "_")))
+  p0 <- p0_vec(runif(L, 0.2, 0.8))
+
+  res <- feder_t_test(fm, p0, sample_info(meta))
+
+  y <- cbind(
+    (fm_raw[, 3:4] - unclass(p0)) /
+      sqrt(2 * unclass(p0) * (1 - unclass(p0)) * 1),
+    (fm_raw[, 5:6] - fm_raw[, 3:4]) /
+      sqrt(2 * fm_raw[, 3:4] * (1 - fm_raw[, 3:4]) * 1)
+  )
+  for (i in 1:L) {
+    tt <- stats::t.test(y[i, ], alternative = "two.sided")
+    expect_equal(res$tvalue[i], unname(tt$statistic))
+    expect_equal(res$pvalue[i], tt$p.value)
+    expect_equal(res$df[i], unname(tt$parameter))
+    expect_equal(res$n[i], 4) # 2 reps x 2 intervals
+  }
+})
+
+test_that("feder_t_test respects one-sided alternatives", {
+  meta <- data.frame(
+    population = "AA",
+    time_point = c(0L, 1L, 2L),
+    replicate = "R1",
+    sample_size = 30L
+  )
+  set.seed(3)
+  L <- 4
+  fm <- freq_matrix(matrix(runif(L * 3, 0.1, 0.9), nrow = L,
+                           dimnames = list(NULL, paste(meta$population,
+                               meta$time_point, meta$replicate, sep = "_"))))
+  p0 <- p0_vec(runif(L, 0.2, 0.8))
+
+  two <- feder_t_test(fm, p0, sample_info(meta))
+  less <- feder_t_test(fm, p0, sample_info(meta), alternative = "less")
+  greater <- feder_t_test(fm, p0, sample_info(meta), alternative = "greater")
+  # one-sided probabilities partition the two-sided one
+  expect_equal(two$pvalue, 2 * pmin(less$pvalue, greater$pvalue))
+  expect_equal(less$pvalue + greater$pvalue, rep(1, L))
+  expect_error(feder_t_test(fm, p0, sample_info(meta), alternative = "bogus"),
+               "should be one of")
+})
+
+test_that("feder_t_test uses p0 as baseline with dt from generation gaps", {
+  # times 0, 5, 10: first increment is p1 - p0 with dt = 5, second p2 - p1 dt = 5
+  meta <- data.frame(
+    population = "AA",
+    time_point = c(0L, 5L, 10L),
+    replicate = "R1",
+    sample_size = 30L
+  )
+  L <- 1
+  p0 <- 0.5
+  p1 <- 0.6
+  p2 <- 0.3
+  fm <- freq_matrix(matrix(c(0.5, p1, p2), nrow = L,
+                           dimnames = list(NULL, c("AA_0_R1", "AA_5_R1",
+                                                   "AA_10_R1"))))
+  res <- feder_t_test(fm, p0_vec(p0), sample_info(meta))
+  y1 <- (p1 - p0) / sqrt(2 * p0 * (1 - p0) * 5)
+  y2 <- (p2 - p1) / sqrt(2 * p1 * (1 - p1) * 5)
+  expect_equal(res$n, 2)
+  expect_equal(res$ybar, mean(c(y1, y2)))
+  expect_equal(res$s2, var(c(y1, y2)))
+})
+
+test_that("feder_t_test handles NA frequencies and all-NA variants", {
+  meta <- data.frame(
+    population = rep("AA", 4),
+    time_point = c(0L, 0L, 1L, 1L),
+    replicate = c("R1", "R2", "R1", "R2"),
+    sample_size = 30L
+  )
+  fm_raw <- matrix(c(0.2, 0.4, 0.6, 0.8,   # variant 1 usable
+                     0.5, 0.5, NA, NA,     # variant 2: t1 missing in both reps
+                     0.3, 0.3, 0.7, 0.7),  # variant 3 usable
+                   nrow = 3, byrow = TRUE,
+                   dimnames = list(NULL, paste(meta$population, meta$time_point,
+                                               meta$replicate, sep = "_")))
+  fm <- freq_matrix(fm_raw)
+  p0 <- p0_vec(c(0.1, 0.5, 0.9))
+
+  expect_no_warning(res <- feder_t_test(fm, p0, sample_info(meta)))
+  # variant 1: 2 increments (R1, R2 into t1); variant 2: 0; variant 3: 2
+  expect_equal(res$n, c(2, 0, 2))
+  v2 <- res[2, ]
+  expect_true(is.na(v2$ybar))
+  expect_true(is.na(v2$s2))
+  expect_true(is.na(v2$tvalue))
+  expect_true(is.na(v2$pvalue))
+})
+
+test_that("feder_t_test validates inputs", {
+  meta <- data.frame(
+    population = "AA", time_point = c(0L, 1L), replicate = "R1",
+    sample_size = 30L
+  )
+  meta_si <- sample_info(meta)
+  p0 <- p0_vec(c(0.5, 0.5))
+  fm_ok <- freq_matrix(matrix(c(0.3, 0.6, 0.4, 0.7), nrow = 2,
+                              dimnames = list(NULL, c("AA_0_R1", "AA_1_R1"))))
+  coords <- snp_coords(data.frame(chrom = c("1", "1"), pos = c(100, 200)))
+
+  fm_one <- freq_matrix(`colnames<-`(matrix(0.3, nrow = 1), "AA_0_R1"))
+  expect_error(feder_t_test(fm_one, p0, meta_si), "p0_vec has 2 entries")
+  expect_error(feder_t_test(fm_ok, p0_vec(c(0.5, 0.5, 0.5)), meta_si),
+               "p0_vec has 3 entries")
+  expect_error(feder_t_test(fm_ok, p0,
+                            sample_info(meta_si[1, , drop = FALSE])),
+               "sample_info has 1 row")
+  expect_error(feder_t_test(fm_ok, p0, meta_si,
+                            snp_coords = data.frame(chrom = "1", pos = 1)),
+               "snp_coords must be a snp_coords object")
+  # with snp_coords, output gains CHROM/POS columns in front
+  res <- feder_t_test(fm_ok, p0, meta_si, snp_coords = coords)
+  expect_named(res, c("population", "CHROM", "POS", "ybar", "s2", "n", "df",
+                      "tvalue", "pvalue"))
+  expect_equal(res$CHROM, rep("1", 2))
+  expect_equal(res$POS, rep(c(100, 200), 1))
+  expect_error(feder_t_test(fm_ok, p0, meta_si,
+                            snp_coords = snp_coords(coords[1, , drop = FALSE])),
+               "snp_coords has 1 rows")
+  expect_error(feder_t_test(fm_ok, p0, p0), "sample_meta must be a sample_info object")
+  # no positive time points
+  meta0 <- data.frame(
+    population = "AA", time_point = 0L, replicate = "R1", sample_size = 30L
+  )
+  fm_zero <- freq_matrix(`colnames<-`(matrix(0.3, nrow = 1), "AA_0_R1"))
+  expect_error(feder_t_test(fm_zero, p0_vec(0.5), sample_info(meta0)),
+               "no positive time points")
+})
+
+test_that("feder_t_test integrates with the dataset kit", {
+  d <- make_test_dataset(L = 12)
+  expect_true(validate_af_dataset(d$freq_mat, d$coords, d$p0, d$meta))
+  res <- feder_t_test(d$freq_mat, d$p0, d$meta)
+  expect_equal(nrow(res), 2 * 12) # 2 populations x 12 variants
+  expect_setequal(unique(res$population), c("AA", "BB"))
+  expect_true(all(res$n > 0))
+  # each row pools both replicates x 2 increments = 4 non-NA increments
+  expect_true(all(res$n == 4))
+  # coords subset aligned with the make_test_dataset ordering
+  res_c <- feder_t_test(d$freq_mat, d$p0, d$meta, snp_coords = d$coords)
+  expect_named(res_c, c("population", "CHROM", "POS", "ybar", "s2", "n", "df",
+                        "tvalue", "pvalue"))
+})
