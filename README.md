@@ -92,6 +92,7 @@ library(rventures)
 - `append_table()` — append a data frame to a file
 - `check_file_exists()` — delete a file left over from a previous run, if present
 - `ensure_parent_dir()` — create the parent folder structure of a target file path, if missing
+- `csv_to_parquet()` — one-time conversion of a large CSV to a chunked parquet dataset (skipped if the directory exists), returned as a lazy `arrow::Dataset`
 
 ## Development
 

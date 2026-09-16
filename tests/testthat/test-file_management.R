@@ -140,3 +140,65 @@ test_that("ensure_parent_dir validates input", {
   expect_error(ensure_parent_dir(c("a.csv", "b.csv")),
                "length\\(file_path\\) == 1 is not TRUE")
 })
+
+test_that("csv_to_parquet converts a CSV and returns a lazy dataset", {
+  skip_if_not_installed("arrow")
+  csv <- tempfile(fileext = ".csv")
+  pdir <- tempfile()
+  on.exit(unlink(c(csv, pdir), recursive = TRUE))
+  writeLines("x,y\n1,2\n3,4\n5,6", csv)
+
+  ds <- csv_to_parquet(csv, pdir, max_rows_per_file = 2L)
+
+  expect_s3_class(ds, "Dataset")
+  expect_equal(dplyr::collect(ds), dplyr::tibble(x = c(1, 3, 5), y = c(2, 4, 6)))
+  # rows split across files at 2 rows each
+  expect_length(list.files(pdir), 2)
+})
+
+test_that("csv_to_parquet skips conversion when the parquet dir exists", {
+  skip_if_not_installed("arrow")
+  csv <- tempfile(fileext = ".csv")
+  pdir <- tempfile()
+  on.exit(unlink(c(csv, pdir), recursive = TRUE))
+  writeLines("x,y\n1,2", csv)
+  csv_to_parquet(csv, pdir)
+
+  files_before <- list.files(pdir, full.names = TRUE)
+  mtimes_before <- file.info(files_before)$mtime
+  Sys.sleep(0.01)
+
+  ds <- csv_to_parquet(csv, pdir)
+  expect_s3_class(ds, "Dataset")
+  expect_equal(dplyr::collect(ds), dplyr::tibble(x = 1, y = 2))
+  # parquet files untouched by the second call
+  expect_identical(
+    file.info(list.files(pdir, full.names = TRUE))$mtime,
+    mtimes_before
+  )
+})
+
+test_that("csv_to_parquet errors on a missing CSV", {
+  skip_if_not_installed("arrow")
+  expect_error(
+    csv_to_parquet("/nonexistent/data.csv", tempfile()),
+    "File not found: /nonexistent/data\\.csv"
+  )
+})
+
+test_that("csv_to_parquet validates tuning arguments", {
+  skip_if_not_installed("arrow")
+  csv <- tempfile(fileext = ".csv")
+  pdir <- tempfile()
+  on.exit(unlink(c(csv, pdir), recursive = TRUE))
+  writeLines("x\n1", csv)
+
+  expect_error(csv_to_parquet(csv, pdir, block_size = 0),
+               "block_size must be a single positive number\\.")
+  expect_error(csv_to_parquet(csv, pdir, block_size = c(1024, 2048)),
+               "block_size must be a single positive number\\.")
+  expect_error(csv_to_parquet(csv, pdir, max_rows_per_file = -1),
+               "max_rows_per_file must be a single positive number\\.")
+  expect_error(csv_to_parquet(csv, pdir, max_rows_per_file = NA_real_),
+               "max_rows_per_file must be a single positive number\\.")
+})

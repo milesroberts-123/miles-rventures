@@ -160,3 +160,65 @@ ensure_parent_dir <- function(file_path) {
     invisible(FALSE)
   }
 }
+
+#' Convert a large CSV file to a parquet dataset for lazy loading
+#'
+#' One-time conversion of a large CSV file into a directory of parquet files
+#' that can be opened with [arrow::open_dataset()] and queried lazily (only
+#' the needed chunks are read into memory). If `parquet_dir` does not exist
+#' yet, the CSV is read with a large block size and written as parquet in
+#' chunks of `max_rows_per_file` rows; otherwise the conversion step is
+#' skipped. In both cases the lazy dataset is returned, so the function is
+#' safe to place at the top of a script that is re-run repeatedly.
+#'
+#' Note that an existing but empty or incomplete `parquet_dir` is trusted as
+#' a completed conversion, mirroring the `dir.exists()` guard this function
+#' wraps.
+#'
+#' @param csv_path Path to the CSV file to convert.
+#' @param parquet_dir Path to the output directory of parquet files.
+#' @param block_size Block size in bytes for reading the CSV. Larger blocks
+#'   speed up parsing of wide files. Default is 16 MiB.
+#' @param max_rows_per_file Maximum number of rows per parquet file in the
+#'   output dataset. Default is 50000.
+#'
+#' @return A lazy [arrow::Dataset] object opened from `parquet_dir`.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # One-time conversion, then lazy reads on every re-run:
+#' hapfire <- csv_to_parquet(
+#'   "/global/scratch/users/milesroberts/moi_lab_projects/grenenet-phase2/data/SV_SNP_INDEL_allele_frequency_trays.csv",
+#'   "/global/scratch/users/milesroberts/moi_lab_projects/grenenet-phase2/data/kmate_parquet"
+#' )
+#' }
+csv_to_parquet <- function(csv_path, parquet_dir,
+                           block_size = 16L * 1024L * 1024L,
+                           max_rows_per_file = 50000L) {
+  if (!requireNamespace("arrow", quietly = TRUE)) {
+    stop("The arrow package is required: install.packages(\"arrow\").")
+  }
+  stopifnot(is.character(csv_path), length(csv_path) == 1,
+            is.character(parquet_dir), length(parquet_dir) == 1)
+  if (!file.exists(csv_path)) {
+    stop("File not found: ", csv_path)
+  }
+  if (!is.numeric(block_size) || length(block_size) != 1 ||
+      !is.finite(block_size) || block_size <= 0) {
+    stop("block_size must be a single positive number.")
+  }
+  if (!is.numeric(max_rows_per_file) || length(max_rows_per_file) != 1 ||
+      !is.finite(max_rows_per_file) || max_rows_per_file <= 0) {
+    stop("max_rows_per_file must be a single positive number.")
+  }
+  if (!dir.exists(parquet_dir)) {
+    arrow::open_dataset(csv_path,
+                        format = "csv",
+                        read_options = arrow::csv_read_options(block_size = block_size)) |>
+      arrow::write_dataset(parquet_dir,
+                           format = "parquet",
+                           max_rows_per_file = max_rows_per_file)
+  }
+  arrow::open_dataset(parquet_dir)
+}
