@@ -242,46 +242,57 @@ p0_vec <- function(x) {
   x
 }
 
-#' Sample metadata (S samples x 3)
+#' Sample metadata (S samples x 4)
 #'
 #' Constructs a validated sample metadata table with one row per sample and
-#' the columns `population` (character), `time_point` (integer), and
-#' `replicate` (character).
+#' the columns `population` (character), `time_point` (integer),
+#' `replicate` (character), and `sample_size` (integer, number of diploid
+#' individuals sampled in the replicate).
 #'
-#' @param x A data.frame with S rows and 3 columns, in the order population,
-#'   time point, replicate (or with those column names in any order).
+#' @param x A data.frame with S rows and 4 columns, in the order population,
+#'   time point, replicate, sample size (or with those column names in any
+#'   order).
 #'
 #' @return A `sample_info` object: a data.frame with columns `population`,
-#'   `time_point`, and `replicate`.
+#'   `time_point`, `replicate`, and `sample_size`.
 #' @export
 #'
 #' @examples
 #' d <- data.frame(
 #'   population = c("AA", "AA", "BB"),
 #'   time_point = c(0, 10, 0),
-#'   replicate = c("R1", "R1", "R1")
+#'   replicate = c("R1", "R1", "R1"),
+#'   sample_size = c(30, 30, 30)
 #' )
 #' sample_info(d)
 sample_info <- function(x) {
   if (!is.data.frame(x)) {
     stop("x must be a data.frame.")
   }
-  if (ncol(x) != 3) {
-    stop("x must have exactly 3 columns: population, time_point, replicate.")
+  if (ncol(x) != 4) {
+    stop("x must have exactly 4 columns: population, time_point, replicate,
+         sample_size.")
   }
-  if (!setequal(names(x), c("population", "time_point", "replicate"))) {
-    stop("x must have columns 'population', 'time_point', and 'replicate'.")
+  if (!setequal(names(x), c("population", "time_point", "replicate",
+                            "sample_size"))) {
+    stop("x must have columns 'population', 'time_point', 'replicate', and
+         'sample_size'.")
   }
-  x <- x[, c("population", "time_point", "replicate"), drop = FALSE]
+  x <- x[, c("population", "time_point", "replicate", "sample_size"),
+         drop = FALSE]
   x$population <- as.character(x$population)
   x$time_point <- as.integer(x$time_point)
   x$replicate <- as.character(x$replicate)
+  x$sample_size <- as.integer(x$sample_size)
   if (any(is.na(x$population)) || any(is.na(x$time_point)) ||
-      any(is.na(x$replicate))) {
+      any(is.na(x$replicate)) || any(is.na(x$sample_size))) {
     stop("sample metadata must not contain NA values.")
   }
   if (any(x$time_point < 0)) {
     stop("time_point must be non-negative.")
+  }
+  if (any(x$sample_size < 1)) {
+    stop("sample_size must be a positive integer.")
   }
   class(x) <- c("sample_info", class(x))
   x
@@ -352,7 +363,8 @@ print.p0_vec <- function(x, ...) {
 #'
 #' @examples
 #' d <- sample_info(data.frame(
-#'   population = c("AA", "BB"), time_point = c(0, 10), replicate = c("R1", "R1")
+#'   population = c("AA", "BB"), time_point = c(0, 10), replicate = c("R1", "R1"),
+#'   sample_size = c(30, 30)
 #' ))
 #' print(d)
 print.sample_info <- function(x, ...) {
@@ -385,7 +397,8 @@ print.sample_info <- function(x, ...) {
 #' coords <- snp_coords(data.frame(chrom = rep("1", 5), pos = 1:5 * 100))
 #' p0 <- p0_vec(m[, 1])
 #' meta <- sample_info(data.frame(
-#'   population = c("AA", "BB"), time_point = c(0, 10), replicate = c("R1", "R1")
+#'   population = c("AA", "BB"), time_point = c(0, 10), replicate = c("R1", "R1"),
+#'   sample_size = c(30, 30)
 #' ))
 #' validate_af_dataset(fm, coords, p0, meta)
 validate_af_dataset <- function(freq_mat, snp_coords, p0, sample_meta,
@@ -451,7 +464,8 @@ validate_af_dataset <- function(freq_mat, snp_coords, p0, sample_meta,
 #' meta <- sample_info(data.frame(
 #'   population = c("AA", "AA", "BB", "BB"),
 #'   time_point = c(0, 10, 0, 10),
-#'   replicate = c("R1", "R1", "R1", "R1")
+#'   replicate = c("R1", "R1", "R1", "R1"),
+#'   sample_size = c(30, 30, 30, 30)
 #' ))
 #' extract_samples(fm, meta, population = "AA")
 extract_samples <- function(freq_mat, sample_meta, population = NULL,

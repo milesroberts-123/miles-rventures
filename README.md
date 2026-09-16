@@ -79,7 +79,7 @@ library(rventures)
 - `freq_matrix()` — validated L x S allele-frequency matrix
 - `snp_coords()` — validated L x 2 chromosome/position table
 - `p0_vec()` — validated initial allele-frequency vector
-- `sample_info()` — validated S x 3 population/time/replicate metadata
+- `sample_info()` — validated S x 4 population/time/replicate/sample-size metadata
 - `validate_af_dataset()` — cross-check the four objects for consistent dimensions
 - `extract_samples()` — subset a freq_matrix by population/time/replicate with rebuilt column names
 

@@ -100,8 +100,9 @@ make_test_dataset <- function(L = 10) {
   times <- c(0, 5, 10)
   reps <- c("R1", "R2")
   meta <- expand.grid(replicate = reps, time_point = times, population = pops)
+  meta$sample_size <- rep(c(30, 25), length.out = nrow(meta))
   meta <- meta[order(meta$population, meta$time_point, meta$replicate), ]
-  meta <- meta[, c("population", "time_point", "replicate")]
+  meta <- meta[, c("population", "time_point", "replicate", "sample_size")]
   S <- nrow(meta)
   fm <- matrix(runif(L * S, 0.05, 0.95), nrow = L)
   colnames(fm) <- paste(meta$population, meta$time_point, meta$replicate, sep = "_")
@@ -151,30 +152,56 @@ test_that("sample_info coerces column types and validates", {
   d <- data.frame(
     population = c("AA", "BB"),
     time_point = c(0, 10),
-    replicate = c("R1", "R1")
+    replicate = c("R1", "R1"),
+    sample_size = c(30, 25)
   )
   si <- sample_info(d)
   expect_s3_class(si, "sample_info")
   expect_type(si$population, "character")
   expect_type(si$time_point, "integer")
   expect_type(si$replicate, "character")
+  expect_type(si$sample_size, "integer")
   # column order is normalized
-  si2 <- sample_info(d[, c("replicate", "time_point", "population")])
-  expect_identical(names(si2), c("population", "time_point", "replicate"))
-  expect_error(sample_info(d[, 1:2]), "exactly 3 columns")
+  si2 <- sample_info(d[, c("sample_size", "replicate", "time_point",
+                           "population")])
+  expect_identical(names(si2), c("population", "time_point", "replicate",
+                                 "sample_size"))
+  expect_error(sample_info(d[, 1:3]), "exactly 4 columns")
   expect_error(
-    sample_info(data.frame(pop = c("AA", "BB"), time = c(0, 10), rep = c("R1", "R1"))),
+    sample_info(data.frame(pop = c("AA", "BB"), time = c(0, 10),
+                           rep = c("R1", "R1"), size = c(30, 25))),
     "population.*time_point.*replicate"
   )
   expect_error(
     sample_info(data.frame(population = c("AA", NA), time_point = c(0, 10),
-                           replicate = c("R1", "R1"))),
+                           replicate = c("R1", "R1"), sample_size = c(30, 25))),
     "NA"
   )
   expect_error(
     sample_info(data.frame(population = c("AA", "BB"), time_point = c(-1, 10),
-                           replicate = c("R1", "R1"))),
+                           replicate = c("R1", "R1"), sample_size = c(30, 25))),
     "non-negative"
+  )
+  expect_error(
+    sample_info(data.frame(population = c("AA", "BB"), time_point = c(0, 10),
+                           replicate = c("R1", "R1"), sample_size = c(0, 25))),
+    "positive integer"
+  )
+  expect_error(
+    sample_info(data.frame(population = c("AA", "BB"), time_point = c(0, 10),
+                           replicate = c("R1", "R1"), sample_size = c(-5, 25))),
+    "positive integer"
+  )
+  # non-numeric sample_size coerces to NA (with a coercion warning) and is
+  # caught by the NA check
+  expect_error(
+    expect_warning(
+      sample_info(data.frame(population = c("AA", "BB"), time_point = c(0, 10),
+                             replicate = c("R1", "R1"),
+                             sample_size = c("30", "big"))),
+      "coercion"
+    ),
+    "NA"
   )
 })
 

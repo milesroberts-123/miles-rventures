@@ -42,7 +42,8 @@ fm <- freq_matrix(m)
 meta <- sample_info(data.frame(
   population = c("AA", "AA", "BB", "BB"),
   time_point = c(0, 10, 0, 10),
-  replicate = c("R1", "R1", "R1", "R1")
+  replicate = c("R1", "R1", "R1", "R1"),
+  sample_size = c(30, 30, 30, 30)
 ))
 extract_samples(fm, meta, population = "AA")
 }

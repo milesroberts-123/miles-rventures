@@ -19,7 +19,8 @@ Print a sample_info object
 }
 \examples{
 d <- sample_info(data.frame(
-  population = c("AA", "BB"), time_point = c(0, 10), replicate = c("R1", "R1")
+  population = c("AA", "BB"), time_point = c(0, 10), replicate = c("R1", "R1"),
+  sample_size = c(30, 30)
 ))
 print(d)
 }

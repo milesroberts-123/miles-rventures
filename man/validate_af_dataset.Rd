@@ -40,7 +40,8 @@ fm <- freq_matrix(m)
 coords <- snp_coords(data.frame(chrom = rep("1", 5), pos = 1:5 * 100))
 p0 <- p0_vec(m[, 1])
 meta <- sample_info(data.frame(
-  population = c("AA", "BB"), time_point = c(0, 10), replicate = c("R1", "R1")
+  population = c("AA", "BB"), time_point = c(0, 10), replicate = c("R1", "R1"),
+  sample_size = c(30, 30)
 ))
 validate_af_dataset(fm, coords, p0, meta)
 }

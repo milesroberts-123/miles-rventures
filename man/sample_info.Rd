@@ -2,28 +2,31 @@
 % Please edit documentation in R/popgen.R
 \name{sample_info}
 \alias{sample_info}
-\title{Sample metadata (S samples x 3)}
+\title{Sample metadata (S samples x 4)}
 \usage{
 sample_info(x)
 }
 \arguments{
-\item{x}{A data.frame with S rows and 3 columns, in the order population,
-time point, replicate (or with those column names in any order).}
+\item{x}{A data.frame with S rows and 4 columns, in the order population,
+time point, replicate, sample size (or with those column names in any
+order).}
 }
 \value{
 A \code{sample_info} object: a data.frame with columns \code{population},
-\code{time_point}, and \code{replicate}.
+\code{time_point}, \code{replicate}, and \code{sample_size}.
 }
 \description{
 Constructs a validated sample metadata table with one row per sample and
-the columns \code{population} (character), \code{time_point} (integer), and
-\code{replicate} (character).
+the columns \code{population} (character), \code{time_point} (integer),
+\code{replicate} (character), and \code{sample_size} (integer, number of diploid
+individuals sampled in the replicate).
 }
 \examples{
 d <- data.frame(
   population = c("AA", "AA", "BB"),
   time_point = c(0, 10, 0),
-  replicate = c("R1", "R1", "R1")
+  replicate = c("R1", "R1", "R1"),
+  sample_size = c(30, 30, 30)
 )
 sample_info(d)
 }
