@@ -1057,3 +1057,247 @@ test_that("feder_t_test integrates with the dataset kit", {
   expect_named(res_c, c("population", "CHROM", "POS", "ybar", "s2", "n", "df",
                         "tvalue", "pvalue"))
 })
+
+test_that("fit_af_glm matches an inline glm on the equivalent data", {
+  set.seed(11)
+  L <- 4
+  meta <- rbind(expand.grid(population = "AA", time_point = c(0, 1, 2),
+                            replicate = c("R1", "R2")),
+                expand.grid(population = "BB", time_point = c(0, 1, 2, 3, 4),
+                            replicate = "R1"))
+  meta$sample_size <- 30
+  meta <- meta[order(meta$population, meta$time_point, meta$replicate), ]
+  fm <- freq_matrix(matrix(runif(L * nrow(meta)), nrow = L,
+                           dimnames = list(NULL, paste(meta$population,
+                               meta$time_point, meta$replicate, sep = "_"))))
+  out <- fit_af_glm(fm, sample_info(meta))
+  expect_named(out, c("population", "estimate", "std.error", "statistic",
+                      "p.value"))
+  expect_identical(out$population, rep(c("AA", "BB"), times = L))
+  expect_equal(nrow(out), 2 * L)
+  # gold check: variant 1, population AA
+  idx <- which(meta$population == "AA" & meta$time_point > 0)
+  d <- data.frame(value = unclass(fm)[1, idx],
+                  t = as.numeric(meta$time_point[idx]),
+                  n = as.numeric(meta$sample_size[idx]))
+  cf <- summary(glm(value ~ t, data = d, weights = n,
+                    family = quasibinomial(link = "logit")))$coefficients["t", ]
+  mine <- unlist(out[out$population == "AA", ][1, c("estimate", "std.error",
+                                                    "statistic", "p.value")])
+  expect_equal(unname(cf), unname(mine))
+})
+
+test_that("fit_af_glm recovers a known logistic slope", {
+  mk <- data.frame(population = "AA", time_point = c(1, 2, 3, 4),
+                   replicate = "R1", sample_size = 500L)
+  slope_true <- 0.4
+  p <- plogis(-0.2 + slope_true * mk$time_point)
+  fmk <- freq_matrix(`colnames<-`(matrix(p, nrow = 1),
+                                  paste(mk$population, mk$time_point,
+                                        mk$replicate, sep = "_")))
+  outk <- fit_af_glm(fmk, sample_info(mk))
+  expect_true(abs(outk$estimate[1] - slope_true) < 0.01)
+})
+
+test_that("fit_af_glm adds the p0 baseline row with p0_weight", {
+  set.seed(12)
+  L <- 3
+  meta <- data.frame(
+    population = "AA", time_point = c(0, 1, 2, 3), replicate = "R1",
+    sample_size = 30L
+  )
+  fm <- freq_matrix(matrix(runif(L * nrow(meta), 0.1, 0.9), nrow = L,
+                           dimnames = list(NULL, paste(meta$population,
+                               meta$time_point, meta$replicate, sep = "_"))))
+  p0 <- p0_vec(runif(L, 0.2, 0.8))
+  idx <- which(meta$time_point > 0)
+  # without p0: fit on positive time points only
+  out <- fit_af_glm(fm, sample_info(meta))
+  for (l in seq_len(L)) {
+    d <- data.frame(value = unclass(fm)[l, idx],
+                    t = as.numeric(meta$time_point[idx]),
+                    n = as.numeric(meta$sample_size[idx]))
+    cf <- summary(glm(value ~ t, data = d, weights = n,
+                      family = quasibinomial(link = "logit")))$coefficients["t", ]
+    expect_equal(unname(cf), unname(unlist(out[l, c("estimate", "std.error",
+                                                    "statistic", "p.value")])))
+  }
+  # with p0: one extra row t=0, weight 1000
+  out0 <- fit_af_glm(fm, sample_info(meta), p0 = p0)
+  for (l in seq_len(L)) {
+    d0 <- rbind(data.frame(value = unclass(p0)[l], t = 0, n = 1000),
+                data.frame(value = unclass(fm)[l, idx],
+                           t = as.numeric(meta$time_point[idx]),
+                           n = as.numeric(meta$sample_size[idx])))
+    cf0 <- summary(glm(value ~ t, data = d0, weights = n,
+                       family = quasibinomial(link = "logit")))$coefficients["t", ]
+    expect_equal(unname(cf0), unname(unlist(out0[l, c("estimate", "std.error",
+                                                      "statistic", "p.value")])))
+  }
+  # p0_weight = 50 respected
+  outw <- fit_af_glm(fm, sample_info(meta), p0 = p0, p0_weight = 50)
+  for (l in seq_len(L)) {
+    dw <- rbind(data.frame(value = unclass(p0)[l], t = 0, n = 50),
+                data.frame(value = unclass(fm)[l, idx],
+                           t = as.numeric(meta$time_point[idx]),
+                           n = as.numeric(meta$sample_size[idx])))
+    cfw <- summary(glm(value ~ t, data = dw, weights = n,
+                       family = quasibinomial(link = "logit")))$coefficients["t", ]
+    expect_equal(unname(cfw), unname(unlist(outw[l, c("estimate", "std.error",
+                                                      "statistic", "p.value")])))
+  }
+})
+
+test_that("fit_af_glm fixed_intercept pins the logit(p0) offset", {
+  set.seed(13)
+  L <- 2
+  meta <- data.frame(
+    population = "AA", time_point = c(0, 1, 2, 3), replicate = "R1",
+    sample_size = 30L
+  )
+  fm <- freq_matrix(matrix(runif(L * nrow(meta), 0.1, 0.9), nrow = L,
+                           dimnames = list(NULL, paste(meta$population,
+                               meta$time_point, meta$replicate, sep = "_"))))
+  p0 <- p0_vec(runif(L, 0.2, 0.8))
+  outf <- fit_af_glm(fm, sample_info(meta), p0 = p0, fixed_intercept = TRUE)
+  idx <- which(meta$time_point > 0)
+  for (l in seq_len(L)) {
+    d0 <- rbind(data.frame(value = unclass(p0)[l], t = 0, n = 1000),
+                data.frame(value = unclass(fm)[l, idx],
+                           t = as.numeric(meta$time_point[idx]),
+                           n = as.numeric(meta$sample_size[idx])))
+    modf <- glm(value ~ t - 1 + offset(rep(qlogis(unclass(p0)[l]), nrow(d0))),
+                data = d0, weights = n,
+                family = quasibinomial(link = "logit"))
+    cff <- summary(modf)$coefficients["t", ]
+    expect_equal(unname(cff), unname(unlist(outf[l, c("estimate", "std.error",
+                                                      "statistic", "p.value")])))
+  }
+  # requires p0
+  expect_error(fit_af_glm(fm, sample_info(meta), fixed_intercept = TRUE),
+               "requires p0")
+})
+
+test_that("fit_af_glm handles NA and boundary values", {
+  set.seed(14)
+  L <- 3
+  meta <- rbind(expand.grid(population = "AA", time_point = c(1, 2, 3),
+                            replicate = "R1"),
+                expand.grid(population = "BB", time_point = c(1, 2, 3),
+                            replicate = "R1"))
+  meta$sample_size <- 30L
+  meta <- meta[order(meta$population, meta$time_point, meta$replicate), ]
+  fm <- freq_matrix(matrix(runif(L * nrow(meta), 0.1, 0.9), nrow = L,
+                           dimnames = list(NULL, paste(meta$population,
+                               meta$time_point, meta$replicate, sep = "_"))))
+  # all-NA variant: NA statistics, correct population labels
+  fm2 <- unclass(fm)
+  fm2[1, ] <- NA
+  out2 <- fit_af_glm(freq_matrix(fm2), sample_info(meta))
+  expect_true(all(is.na(out2[1, c("estimate", "std.error", "statistic",
+                                  "p.value")])))
+  expect_true(all(is.na(out2[2, c("estimate", "std.error", "statistic",
+                                  "p.value")])))
+  expect_identical(out2$population[1:2], c("AA", "BB"))
+  expect_true(!all(is.na(out2[3, c("estimate", "std.error", "statistic",
+                                   "p.value")])))
+  # boundary 0/1 values are kept in the fit
+  idx <- which(meta$population == "AA" & meta$time_point > 0)
+  fm3 <- unclass(fm)
+  fm3[1, idx[1]] <- 1
+  fm3[1, idx[2]] <- 0
+  out3 <- fit_af_glm(freq_matrix(fm3), sample_info(meta))
+  d3 <- data.frame(value = unclass(fm)[1, idx],
+                   t = as.numeric(meta$time_point[idx]),
+                   n = as.numeric(meta$sample_size[idx]))
+  d3$value[1] <- 1
+  d3$value[2] <- 0
+  cf3 <- summary(glm(value ~ t, data = d3, weights = n,
+                     family = quasibinomial(link = "logit")))$coefficients["t", ]
+  mine3 <- unlist(out3[out3$population == "AA", ][1, c("estimate", "std.error",
+                                                       "statistic", "p.value")])
+  expect_equal(unname(cf3), unname(mine3))
+})
+
+test_that("fit_af_glm handles multiple populations and snp_coords", {
+  set.seed(15)
+  L <- 3
+  meta <- rbind(expand.grid(population = "AA", time_point = c(1, 2),
+                            replicate = c("R1", "R2")),
+                expand.grid(population = "BB", time_point = c(1, 2, 3),
+                            replicate = "R1"))
+  meta$sample_size <- 30L
+  meta <- meta[order(meta$population, meta$time_point, meta$replicate), ]
+  fm <- freq_matrix(matrix(runif(L * nrow(meta), 0.1, 0.9), nrow = L,
+                           dimnames = list(NULL, paste(meta$population,
+                               meta$time_point, meta$replicate, sep = "_"))))
+  coords <- snp_coords(data.frame(chrom = rep("2L", L),
+                                  pos = seq_len(L) * 100))
+  outc <- fit_af_glm(fm, sample_info(meta), snp_coords = coords)
+  expect_named(outc, c("population", "CHROM", "POS", "estimate", "std.error",
+                       "statistic", "p.value"))
+  expect_equal(nrow(outc), 2 * L)
+  expect_identical(as.character(outc$CHROM), rep("2L", 2 * L))
+  expect_identical(outc$POS, rep(seq_len(L) * 100, times = 2))
+})
+
+test_that("fit_af_glm validates inputs", {
+  set.seed(16)
+  L <- 2
+  meta <- data.frame(
+    population = "AA", time_point = c(0, 1, 2), replicate = "R1",
+    sample_size = 30L
+  )
+  fm_ok <- freq_matrix(matrix(runif(L * 3), nrow = L,
+                              dimnames = list(NULL, c("AA_0_R1", "AA_1_R1",
+                                                      "AA_2_R1"))))
+  si_ok <- sample_info(meta)
+  coords <- snp_coords(data.frame(chrom = c("1", "1"), pos = c(100, 200)))
+  expect_error(fit_af_glm(matrix(0.5, 2, 3), si_ok),
+               "freq_mat must be a freq_matrix object.")
+  expect_error(fit_af_glm(fm_ok, meta), "sample_meta must be a sample_info object.")
+  expect_error(fit_af_glm(fm_ok, si_ok, snp_coords = data.frame(chrom = "1",
+                                                                pos = 1)),
+               "snp_coords must be a snp_coords object")
+  expect_error(fit_af_glm(fm_ok, si_ok, p0 = c(0.5, 0.5)),
+               "p0 must be a p0_vec object or NULL.")
+  expect_error(fit_af_glm(fm_ok, si_ok, p0 = p0_vec(c(0.5, 0.5, 0.5))),
+               "p0_vec has 3 entries")
+  expect_error(fit_af_glm(fm_ok, si_ok, p0_weight = -1),
+               "p0_weight must be a single positive number.")
+  expect_error(fit_af_glm(fm_ok, si_ok, p0_weight = c(10, 20)),
+               "p0_weight must be a single positive number.")
+  expect_error(fit_af_glm(fm_ok, si_ok, fixed_intercept = "yes"),
+               "fixed_intercept must be a single TRUE or FALSE.")
+  expect_error(fit_af_glm(fm_ok, si_ok, snp_coords = coords,
+                          p0 = p0_vec(0.5)),
+               "p0_vec has 1 entries")
+  expect_error(fit_af_glm(fm_ok, sample_info(meta[1, , drop = FALSE])),
+               "sample_info has 1 row")
+  expect_error(fit_af_glm(fm_ok, si_ok,
+                          snp_coords = snp_coords(coords[1, , drop = FALSE])),
+               "snp_coords has 1 rows")
+  # no positive time points
+  meta0 <- data.frame(
+    population = "AA", time_point = 0L, replicate = "R1", sample_size = 30L
+  )
+  fm_zero <- freq_matrix(`colnames<-`(matrix(0.3, nrow = 1), "AA_0_R1"))
+  expect_error(fit_af_glm(fm_zero, p0 = NULL, sample_info(meta0)),
+               "nothing to fit")
+})
+
+test_that("fit_af_glm integrates with the dataset kit", {
+  d <- make_test_dataset(L = 12)
+  expect_true(validate_af_dataset(d$freq_mat, d$coords, d$p0, d$meta))
+  res <- fit_af_glm(d$freq_mat, d$meta)
+  expect_equal(nrow(res), 2 * 12) # 2 populations x 12 variants
+  expect_setequal(unique(res$population), c("AA", "BB"))
+  expect_true(all(is.finite(res$estimate)))
+  # with p0 baseline added, all rows still finite
+  res0 <- fit_af_glm(d$freq_mat, d$meta, p0 = d$p0)
+  expect_equal(nrow(res0), 2 * 12)
+  expect_true(all(is.finite(res0$estimate)))
+  res_c <- fit_af_glm(d$freq_mat, d$meta, snp_coords = d$coords)
+  expect_named(res_c, c("population", "CHROM", "POS", "estimate", "std.error",
+                        "statistic", "p.value"))
+})

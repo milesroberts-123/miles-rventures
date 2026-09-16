@@ -1431,3 +1431,206 @@ matrixStats_rowVars <- function(m) {
   out[ok] <- sums[ok] / (n[ok] - 1)
   out
 }
+
+#' Quasibinomial GLM of allele frequency over time
+#'
+#' For each variant and population, fits `glm(value ~ t, weights = n, family
+#' = quasibinomial(link = "logit"))` to the allele-frequency trajectory over
+#' time points, where `value` is the allele frequency, `t` the time point in
+#' generations, and `n` the per-replicate sample size used as observation
+#' weights. Returns the slope of the logistic trend (`t` term) per variant
+#' and population. Adapted from a chunked allele frequency processing script
+#' of the grenenet-phase2 project.
+#'
+#' @param freq_mat A `freq_matrix` object: L variants (rows) x S samples
+#'   (columns), with column names `pop_time_rep` matching `sample_meta` (as
+#'   built by [sample_info()]).
+#' @param sample_meta A `sample_info` object with S rows, matching the
+#'   columns of `freq_mat` in order.
+#' @param snp_coords Optional `snp_coords` object with L rows, providing the
+#'   `CHROM` and `POS` output columns.
+#' @param p0 Optional `p0_vec` object of length L: shared allele frequencies
+#'   at generation 0. When supplied, each population's fit data gains one
+#'   extra observation at `t = 0` with `value = p0` and weight `p0_weight`,
+#'   anchoring the trajectory at the shared baseline (observed time-0
+#'   columns of `freq_mat` are never used as model input).
+#' @param p0_weight Numeric weight given to the `p0` observation, default
+#'   `1000`. Ignored when `p0 = NULL`.
+#' @param fixed_intercept Logical, default `FALSE`. When `TRUE` (and `p0`
+#'   is supplied), fits `value ~ t - 1 + offset(qlogis(p0))` instead,
+#'   pinning the intercept at the shared baseline on the logit scale.
+#'
+#' @return A data.frame with one row per variant and population, with columns
+#'   `population`, `CHROM`, `POS` (the latter two only if `snp_coords` is
+#'   supplied), `estimate` (logistic slope of `t`), `std.error`, `statistic`,
+#'   and `p.value` (the `t` term only; no intercept row). Variants whose fit
+#'   fails (e.g. all frequencies NA in the population) get `NA` statistics.
+#' @export
+#'
+#' @details
+#' Only time points greater than zero enter the model, with the per-sample
+#' `sample_size` as GLM weights; if `p0` is supplied, a single extra
+#' observation per population at `t = 0` with weight `p0_weight` is added
+#' first, so the shared baseline participates in every population's fit.
+#' Frequencies of exactly 0 or 1 are kept (the quasibinomial model handles
+#' boundary values); variants with many fixed observations may still fail
+#' to converge and then yield `NA` statistics. The function is pure: to
+#' process a large CSV in batches, first convert it to a parquet dataset
+#' with [csv_to_parquet()], then apply this function per batch and append
+#' the results.
+#'
+#' @examples
+#' set.seed(1)
+#' L <- 5
+#' meta <- rbind(expand.grid(population = "AA", time_point = c(0, 1, 2),
+#'                           replicate = c("R1", "R2")),
+#'               expand.grid(population = "BB", time_point = c(0, 1, 2),
+#'                           replicate = "R1"))
+#' meta$sample_size <- 30
+#' meta <- meta[order(meta$population, meta$time_point, meta$replicate), ]
+#' fm <- freq_matrix(matrix(runif(L * nrow(meta)), nrow = L,
+#'                          dimnames = list(NULL, paste(meta$population,
+#'                              meta$time_point, meta$replicate, sep = "_"))))
+#' fit_af_glm(fm, sample_info(meta))
+fit_af_glm <- function(freq_mat, sample_meta, snp_coords = NULL, p0 = NULL,
+                       p0_weight = 1000, fixed_intercept = FALSE) {
+  if (!inherits(freq_mat, "freq_matrix")) {
+    stop("freq_mat must be a freq_matrix object.")
+  }
+  if (!inherits(sample_meta, "sample_info")) {
+    stop("sample_meta must be a sample_info object.")
+  }
+  if (!is.null(snp_coords) && !inherits(snp_coords, "snp_coords")) {
+    stop("snp_coords must be a snp_coords object.")
+  }
+  if (!is.null(p0) && !inherits(p0, "p0_vec")) {
+    stop("p0 must be a p0_vec object or NULL.")
+  }
+  if (!is.numeric(p0_weight) || length(p0_weight) != 1L ||
+        is.na(p0_weight) || p0_weight <= 0) {
+    stop("p0_weight must be a single positive number.")
+  }
+  if (!is.logical(fixed_intercept) || length(fixed_intercept) != 1L ||
+        is.na(fixed_intercept)) {
+    stop("fixed_intercept must be a single TRUE or FALSE.")
+  }
+  if (fixed_intercept && is.null(p0)) {
+    stop("fixed_intercept = TRUE requires p0.")
+  }
+  L <- nrow(freq_mat)
+  S <- ncol(freq_mat)
+  if (!is.null(p0) && L != length(p0)) {
+    stop(sprintf(
+      "Variant count mismatch: freq_matrix has %d rows, p0_vec has %d entries.",
+      L, length(p0)
+    ))
+  }
+  if (S != nrow(sample_meta)) {
+    stop(sprintf(
+      "Sample count mismatch: freq_matrix has %d columns, sample_info has %d rows.",
+      S, nrow(sample_meta)
+    ))
+  }
+  if (!is.null(snp_coords) && nrow(snp_coords) != L) {
+    stop(sprintf(
+      "Variant count mismatch: freq_matrix has %d rows, snp_coords has %d rows.",
+      L, nrow(snp_coords)
+    ))
+  }
+
+  fm <- unclass(freq_mat)
+  meta <- sample_meta[, c("population", "time_point", "replicate",
+                          "sample_size"), drop = FALSE]
+  times <- sort(unique(meta$time_point))
+  times <- times[times > 0]
+  if (length(times) < 1) {
+    stop("sample_info has no positive time points: nothing to fit.")
+  }
+  pops_all <- unique(meta$population)
+  pops_with <- pops_all[vapply(pops_all, function(pp) {
+    any(meta$population == pp & meta$time_point %in% times)
+  }, logical(1))]
+
+  one_fit <- function(l) {
+    rows <- list()
+    row_k <- 0
+    for (pop in pops_with) {
+      pop_idx <- which(meta$population == pop & meta$time_point %in% times)
+      vals <- fm[l, pop_idx]
+      ok <- !is.na(vals) & vals >= 0 & vals <= 1
+      fit_df <- data.frame(
+        value = vals[ok],
+        t = as.numeric(meta$time_point[pop_idx][ok]),
+        n = as.numeric(meta$sample_size[pop_idx][ok])
+      )
+      if (!is.null(p0)) {
+        p0_l <- unclass(p0)[l]
+        fit_df <- rbind(
+          data.frame(value = p0_l, t = 0, n = p0_weight),
+          fit_df
+        )
+      }
+      if (nrow(fit_df) < 2) {
+        row_k <- row_k + 1
+        rows[[row_k]] <- data.frame(population = pop, estimate = NA_real_,
+                                    std.error = NA_real_, statistic = NA_real_,
+                                    p.value = NA_real_)
+        next
+      }
+      row_k <- row_k + 1
+      rows[[row_k]] <- tryCatch(
+        {
+          if (fixed_intercept) {
+            mod <- stats::glm(
+              value ~ t - 1 + offset(rep(stats::qlogis(p0_l), nrow(fit_df))),
+              data = fit_df, weights = n,
+              family = stats::quasibinomial(link = "logit")
+            )
+          } else {
+            mod <- stats::glm(
+              value ~ t, data = fit_df, weights = n,
+              family = stats::quasibinomial(link = "logit")
+            )
+          }
+          cf <- summary(mod)$coefficients
+          if (!"t" %in% rownames(cf)) {
+            data.frame(population = pop, estimate = NA_real_,
+                       std.error = NA_real_, statistic = NA_real_,
+                       p.value = NA_real_)
+          } else {
+            data.frame(
+              population = pop,
+              estimate = cf["t", "Estimate"],
+              std.error = cf["t", "Std. Error"],
+              statistic = cf["t", "t value"],
+              p.value = cf["t", "Pr(>|t|)"]
+            )
+          }
+        },
+        error = function(e) {
+          data.frame(population = pop, estimate = NA_real_,
+                     std.error = NA_real_, statistic = NA_real_,
+                     p.value = NA_real_)
+        }
+      )
+    }
+    if (row_k == 0) {
+      return(data.frame(population = NA_character_, estimate = NA_real_,
+                        std.error = NA_real_, statistic = NA_real_,
+                        p.value = NA_real_))
+    }
+    do.call(rbind.data.frame, rows)
+  }
+
+  out_list <- lapply(seq_len(L), one_fit)
+  out <- do.call(rbind.data.frame, out_list)
+  if (!is.null(snp_coords)) {
+    n_pops <- length(pops_with)
+    out$CHROM <- rep(snp_coords$CHROM, times = n_pops)
+    out$POS <- rep(snp_coords$POS, times = n_pops)
+    out <- out[, c("population", "CHROM", "POS",
+                   setdiff(names(out), c("population", "CHROM", "POS"))),
+               drop = FALSE]
+  }
+  out
+}

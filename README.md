@@ -74,6 +74,7 @@ library(rventures)
 - `replicate_gt()` — variance/covariance partition by replicate and time labels
 - `covmat_pop_pair()` — mean standardized covariance between a pair of populations
 - `feder_t_test()` — Feder-style one-sample t-test of standardized allele-frequency changes, pooled across time points and replicates per population
+- `fit_af_glm()` — quasibinomial GLM of allele frequency over time, with optional shared-baseline observation and fixed-intercept offset
 
 ### Dataset structures
 
