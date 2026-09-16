@@ -100,8 +100,11 @@ fc <- function(p0, pt) {
 #'   passed to [fc()].
 #' @param pt Numeric vector of final allele frequencies, between 0 and 1,
 #'   passed to [fc()].
-#' @param S0 Sample size (number of diploid individuals) at time 0.
-#' @param St Sample size (number of diploid individuals) at time t.
+#' @param S0 Sample size (number of diploid individuals) at time 0. Note
+#'   this is a count of diploid individuals, unlike the chromosome-counting
+#'   `n` of [covmat_from_pmat()].
+#' @param St Sample size (number of diploid individuals) at time t; diploid
+#'   individuals, like `S0`.
 #' @param t Number of generations between the two samples.
 #'
 #' @return A numeric vector of length 2: Ne estimated with `r_low` and with
@@ -124,7 +127,8 @@ waples_ne <- function(r_low, r_high, p0, pt, S0, St, t) {
 #' rate (Hill and Weir 1988).
 #'
 #' @param d Distance between two loci in bp.
-#' @param n Sample size.
+#' @param n Sample size (number of chromosomes sampled), per Hill and Weir
+#'   (1988).
 #' @param C Population-scaled recombination rate: 4Nc.
 #'
 #' @return The expected r^2.
@@ -697,9 +701,12 @@ standard_cov_by_het <- function(pmat, covmat) {
 #'
 #' @param pmat Numeric matrix of allele frequencies; the first column is the
 #'   initial generation and time points ascend left to right.
-#' @param n Optional numeric vector of sample sizes (number of chromosomes
-#'   sampled per time point); required if `correct_for_n = TRUE`. Must have
-#'   one entry per time point (i.e., `ncol(pmat)`).
+#' @param n Optional numeric vector of sample sizes (number of chromosomes,
+#'   i.e. gene copies, sampled per time point); required if
+#'   `correct_for_n = TRUE`. Must have one entry per time point (i.e.,
+#'   `ncol(pmat)`), and all entries must be at least 2: the raw-frequency
+#'   correction divides by `n - 1`. Note `n` counts chromosomes, not diploid
+#'   individuals.
 #' @param correct_for_n Boolean; whether to correct covariances and variances
 #'   for finite sample size.
 #' @param standard_by_het Boolean; whether to standardize the covariance
@@ -833,7 +840,7 @@ rolling_matrix_sum <- function(mat) {
 #' @param pmat Numeric matrix of allele frequencies, rows = variants,
 #'   columns = time points ascending; the first column is the initial
 #'   generation.
-#' @param N Effective population size.
+#' @param N Effective population size (number of diploid individuals).
 #' @param n Numeric vector of sample sizes (chromosomes) per time point,
 #'   passed to [covmat_from_pmat()] for the sample size correction.
 #' @param take_abs Boolean; whether to accumulate the absolute values of the

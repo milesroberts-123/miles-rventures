@@ -15,7 +15,7 @@ g_prime(times, pmat, N, n, take_abs = FALSE)
 columns = time points ascending; the first column is the initial
 generation.}
 
-\item{N}{Effective population size.}
+\item{N}{Effective population size (number of diploid individuals).}
 
 \item{n}{Numeric vector of sample sizes (chromosomes) per time point,
 passed to \code{\link[=covmat_from_pmat]{covmat_from_pmat()}} for the sample size correction.}

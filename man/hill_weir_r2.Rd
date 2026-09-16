@@ -9,7 +9,8 @@ hill_weir_r2(d, n, C)
 \arguments{
 \item{d}{Distance between two loci in bp.}
 
-\item{n}{Sample size.}
+\item{n}{Sample size (number of chromosomes sampled), per Hill and Weir
+(1988).}
 
 \item{C}{Population-scaled recombination rate: 4Nc.}
 }

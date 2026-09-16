@@ -17,9 +17,12 @@ passed to \code{\link[=fc]{fc()}}.}
 \item{pt}{Numeric vector of final allele frequencies, between 0 and 1,
 passed to \code{\link[=fc]{fc()}}.}
 
-\item{S0}{Sample size (number of diploid individuals) at time 0.}
+\item{S0}{Sample size (number of diploid individuals) at time 0. Note
+this is a count of diploid individuals, unlike the chromosome-counting
+\code{n} of \code{\link[=covmat_from_pmat]{covmat_from_pmat()}}.}
 
-\item{St}{Sample size (number of diploid individuals) at time t.}
+\item{St}{Sample size (number of diploid individuals) at time t; diploid
+individuals, like \code{S0}.}
 
 \item{t}{Number of generations between the two samples.}
 }

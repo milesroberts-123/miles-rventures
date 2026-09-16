@@ -18,9 +18,12 @@ covmat_from_pmat(
 \item{pmat}{Numeric matrix of allele frequencies; the first column is the
 initial generation and time points ascend left to right.}
 
-\item{n}{Optional numeric vector of sample sizes (number of chromosomes
-sampled per time point); required if \code{correct_for_n = TRUE}. Must have
-one entry per time point (i.e., \code{ncol(pmat)}).}
+\item{n}{Optional numeric vector of sample sizes (number of chromosomes,
+i.e. gene copies, sampled per time point); required if
+\code{correct_for_n = TRUE}. Must have one entry per time point (i.e.,
+\code{ncol(pmat)}), and all entries must be at least 2: the raw-frequency
+correction divides by \code{n - 1}. Note \code{n} counts chromosomes, not diploid
+individuals.}
 
 \item{correct_for_n}{Boolean; whether to correct covariances and variances
 for finite sample size.}
