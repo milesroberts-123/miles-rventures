@@ -1797,3 +1797,30 @@ ncne <- function(s) {
   stopifnot(is.numeric(s), s >= 0, s <= 1)
   1 / (1 - s / 2)
 }
+
+#' Simulate a pooled allele-frequency estimate, Buffalo and Coop 2020 PNAS
+#'
+#' Simulates a pool-sequencing observation of an allele frequency: one
+#' consistent realized sequencing depth is drawn per pool, and reads are
+#' sampled from the true allele count in the pool.
+#'
+#' @param p True allele frequency in the pool.
+#' @param n Pool size in individuals (2 * n chromosomes sampled).
+#' @param d Mean read depth.
+#'
+#' @return The observed allele-frequency estimate, or NA if the realized
+#'   depth is zero.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' simulate_af_est(p = 0.3, n = 250, d = 10000)
+#' }
+simulate_af_est <- function(p, n, d) {
+  d_obs <- rpois(1, d)
+  if (d_obs == 0) return(NA_real_)
+  x_obs <- rbinom(1, size = 2 * n, prob = p)
+  r_obs <- rbinom(1, size = d_obs, prob = x_obs / (2 * n))
+  p_obs <- r_obs / d_obs
+  return(p_obs)
+}
