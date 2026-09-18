@@ -83,6 +83,7 @@ library(rventures)
 - `fit_af_glm()` — quasibinomial GLM of allele frequency over time, with optional shared-baseline observation and fixed-intercept offset
 - `sum_of_het_by_t()` — summed heterozygosity per time point, with labels extracted from column names
 - `estim_linked_selection_params()`, `estim_linked_selection_params_new()` — Buffalo & Coop (2019) linked-selection window tables (raw and heterozygosity-standardized)
+- `simulate_af_est()` — pooled allele-frequency observation with Poisson depth (Buffalo & Coop 2020)
 
 ### Dataset structures
 
