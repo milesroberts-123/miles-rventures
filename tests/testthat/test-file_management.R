@@ -202,3 +202,62 @@ test_that("csv_to_parquet validates tuning arguments", {
   expect_error(csv_to_parquet(csv, pdir, max_rows_per_file = NA_real_),
                "max_rows_per_file must be a single positive number\\.")
 })
+
+# ---------------------------------------------------------------------------
+# Ported: create_blocks, grab_sample_sizes, find_best_poly, eval_deriv
+# (from grenenet-phase2 resources/R)
+# ---------------------------------------------------------------------------
+
+test_that("create_blocks snp mode assigns fixed SNP counts per block", {
+  d <- data.frame(chrom = c(1, 1, 1, 1, 1, 2, 2),
+                  pos = c(10, 20, 30, 40, 50, 10, 20))
+  blocks <- create_blocks(d, chrom, pos, window_size = 2, sep = "_", block_by = "snp")
+  expect_equal(blocks$block, c(1, 1, 2, 2, 3, 1, 2))
+  expect_equal(blocks$window, c("1_1", "1_1", "1_2", "1_2", "1_3", "2_1", "2_2"))
+})
+
+test_that("create_blocks base mode bins by physical distance", {
+  d <- data.frame(chrom = c(1, 1, 1, 1),
+                  pos = c(5, 15, 25, 35))
+  blocks <- create_blocks(d, chrom, pos, window_size = 10, sep = "_", block_by = "base")
+  expect_equal(blocks$block, c(0, 1, 2, 3))
+  expect_equal(blocks$window, c("1_0", "1_1", "1_2", "1_3"))
+})
+
+test_that("create_blocks errors on unsorted positions within chromosome", {
+  d <- data.frame(chrom = c(1, 1),
+                  pos = c(20, 10))
+  expect_error(create_blocks(d, chrom, pos, window_size = 10, sep = "_", block_by = "snp"),
+               "sorted")
+})
+
+test_that("create_blocks rejects invalid block_by", {
+  d <- data.frame(chrom = c(1, 1), pos = c(1, 2))
+  expect_error(create_blocks(d, chrom, pos, window_size = 10, sep = "_", block_by = "nope"),
+               "not valid")
+})
+
+test_that("grab_sample_sizes prepends first_n and sorts", {
+  n_data <- data.frame(pool = c("A_1", "B_1", "A_2"),
+                       n = c(100, 200, 150))
+  out <- grab_sample_sizes(n_data, pool, c("A_1", "A_2"), 10000, n)
+  expect_equal(nrow(out), 2)
+  expect_equal(out$pool, c("A_1", "A_2"))
+  expect_equal(out$n, c(100, 150))
+  expect_equal(out[1, ], c("0", 10000))
+})
+
+test_that("find_best_poly picks a low degree for a linear signal", {
+  set.seed(2)
+  d <- data.frame(x = 1:50, y = 2 + 3 * (1:50) + rnorm(50, sd = 0.5))
+  m <- find_best_poly(d, "x", "y", max_degree = 4)
+  expect_s3_class(m, "lm")
+  expect_lte(length(coef(m)), 3)
+})
+
+test_that("eval_deriv returns slope for a linear model", {
+  set.seed(2)
+  d <- data.frame(x = 1:50, y = 2 + 3 * (1:50))
+  m <- find_best_poly(d, "x", "y", max_degree = 2)
+  expect_equal(eval_deriv(m, 10), 3)
+})

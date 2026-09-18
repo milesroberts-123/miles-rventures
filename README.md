@@ -41,8 +41,11 @@ library(rventures)
 ### Plotting
 
 - `save_plot()` — save a ggplot as PDF/PNG with by-date/by-analysis symlinks
+- `save_plot_and_object()` — save a ggplot as an image plus its RDS object
 - `plot_groups_pdf()` — split a data frame by grouping columns and write one plot per group to a multi-page PDF
 - `plot_manhattan()` — GWAS Manhattan plot with per-chromosome x-axis and optional SNP highlighting
+- `plot_manhattan_by_site()` — per-site Manhattan plot saved under a by-date results path
+- `plot_pairs_heatmap()` — tiled heatmap of pre-melted pairwise statistics with a scico palette
 - `plot_paf_dotplot()` — dotplot of aligned feature (PAF) coordinates, query vs. target
 - `plot_var_cov_matrix()` — upper-triangle heatmap of a variance-covariance matrix
 - `plot_predictions_truth_scatter()` — predictions vs. truth scatter with identity line, fit, and correlation stats
@@ -59,6 +62,8 @@ library(rventures)
 - `fc()` — standardized variance in allele-frequency change (Waples 1989)
 - `waples_ne()` — temporal Ne estimate corrected for selfing
 - `hill_weir_r2()` — expected LD (r^2) between loci a given distance apart (Hill & Weir 1988)
+- `simulate_freq_traj()` — Przeworski (2005) allele-frequency trajectory under selection and drift
+- `ncne()` — Nc/Ne ratio from selfing rate (Pollak 1987)
 
 ### Temporal-replicate toolkit
 
@@ -76,6 +81,8 @@ library(rventures)
 - `covmat_pop_pair()` — mean standardized covariance between a pair of populations
 - `feder_t_test()` — Feder-style one-sample t-test of standardized allele-frequency changes, pooled across time points and replicates per population
 - `fit_af_glm()` — quasibinomial GLM of allele frequency over time, with optional shared-baseline observation and fixed-intercept offset
+- `sum_of_het_by_t()` — summed heterozygosity per time point, with labels extracted from column names
+- `estim_linked_selection_params()`, `estim_linked_selection_params_new()` — Buffalo & Coop (2019) linked-selection window tables (raw and heterozygosity-standardized)
 
 ### Dataset structures
 
@@ -103,6 +110,12 @@ library(rventures)
 - `check_file_exists()` — delete a file left over from a previous run, if present
 - `ensure_parent_dir()` — create the parent folder structure of a target file path, if missing
 - `csv_to_parquet()` — one-time conversion of a large CSV to a chunked parquet dataset (skipped if the directory exists), returned as a lazy `arrow::Dataset`
+
+### Data wrangling helpers
+
+- `create_blocks()` — block a sorted variant table by SNP count or physical distance, never across chromosomes
+- `grab_sample_sizes()` — subset a sample-size table and prepend the generation-0 size
+- `find_best_poly()`, `eval_deriv()` — best-AIC raw-polynomial fit and derivative evaluation
 
 ## Development
 
