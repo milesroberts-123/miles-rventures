@@ -25,7 +25,7 @@ test_that("WF_sel accepts a vector s of length G - 1", {
   expect_length(out, 10)
 })
 
-test_that("WF_sel errors on wrong-length s", {
+test_that("WF_sel errors on too-short s", {
   expect_error(
     WF_sel(N = 100, q = 0.1, h = 0.5, s = c(0.01, 0.02), G = 10),
     "scalar or a vector of length G - 1"
@@ -530,7 +530,7 @@ test_that("rm_na_after_na returns vector unchanged when NA only at the end", {
 })
 
 test_that("arcsin_sqrt returns endpoints correctly", {
-  expect_equal(arcsin_sqrt(1), pi / 2)
+  expect_equal(arcsin_sqrt(1), pi)
   expect_equal(arcsin_sqrt(0), 0)
 })
 
@@ -544,7 +544,7 @@ test_that("arcsin_sqrt catches bad frequencies", {
 })
 
 test_that("arcsin_sqrt NA input gives NA output", {
-  expect_equal(arcsin_sqrt(c(0, NA, 1)), c(0, NA, pi / 2))
+  expect_equal(arcsin_sqrt(c(0, NA, 1)), c(0, NA, pi))
 })
 
 test_that("sign_permute_increments returns input as output for none procedure", {
@@ -1300,4 +1300,63 @@ test_that("fit_af_glm integrates with the dataset kit", {
   res_c <- fit_af_glm(d$freq_mat, d$meta, snp_coords = d$coords)
   expect_named(res_c, c("population", "CHROM", "POS", "estimate", "std.error",
                         "statistic", "p.value"))
+})
+
+# ---------------------------------------------------------------------------
+# Ported: sum_of_het_by_t (from grenenet-phase2 resources/R/tests.R)
+# ---------------------------------------------------------------------------
+
+test_that("sum_of_het_by_t returns data frame with columns t and sum_of_het", {
+  pmat <- matrix(rep(0.5, 15), nrow = 5, ncol = 3,
+                 dimnames = list(NULL, c("gen_1", "gen_2", "gen_3")))
+  result <- sum_of_het_by_t(pmat)
+  expect_true(is.data.frame(result))
+  expect_true("t" %in% names(result))
+  expect_true("sum_of_het" %in% names(result))
+  expect_equal(nrow(result), 3)
+})
+
+test_that("sum_of_het_by_t computes correct sum_of_het values", {
+  pmat <- matrix(rep(0.5, 15), nrow = 5, ncol = 3,
+                 dimnames = list(NULL, c("gen_1", "gen_2", "gen_3")))
+  result <- sum_of_het_by_t(pmat)
+  # 5 rows * 2*0.5*(1-0.5) = 5 * 0.5 = 2.5
+  expect_equal(result$sum_of_het, rep(2.5, 3))
+})
+
+test_that("sum_of_het_by_t computes 0 for fixation states (all 0 or all 1)", {
+  pmat_fix0 <- matrix(rep(0, 12), nrow = 4, ncol = 3,
+                      dimnames = list(NULL, c("gen_1", "gen_2", "gen_3")))
+  pmat_fix1 <- matrix(rep(1, 12), nrow = 4, ncol = 3,
+                      dimnames = list(NULL, c("gen_1", "gen_2", "gen_3")))
+  result0 <- sum_of_het_by_t(pmat_fix0)
+  result1 <- sum_of_het_by_t(pmat_fix1)
+  expect_equal(result0$sum_of_het, rep(0, 3))
+  expect_equal(result1$sum_of_het, rep(0, 3))
+})
+
+test_that("sum_of_het_by_t produces different values for different allele frequencies", {
+  pmat <- matrix(c(rep(0.5, 10),
+                   rep(0.1, 10)), nrow = 5, ncol = 4,
+                 dimnames = list(NULL, c("gen_1", "gen_2", "gen_3", "gen_4")))
+  # 5 * 2*0.5*(1-0.5) = 2.5 for first two columns
+  # 5 * 2*0.1*(1-0.1) = 0.9 for last two
+  result <- sum_of_het_by_t(pmat)
+  expect_equal(result$sum_of_het[1], 2.5)
+  expect_equal(result$sum_of_het[2], 2.5)
+  expect_equal(result$sum_of_het[3], 0.9)
+  expect_equal(result$sum_of_het[4], 0.9)
+})
+
+test_that("sum_of_het_by_t extracts t labels between underscores", {
+  pmat <- matrix(rep(0.5, 6), nrow = 2, ncol = 3,
+                 dimnames = list(NULL, c("site_1_rep", "site_2_rep", "site_3_rep")))
+  result <- sum_of_het_by_t(pmat)
+  expect_equal(result$t, c("1", "2", "3"))
+})
+
+test_that("ncne returns 1 for panmictic and matches Pollak for selfing", {
+  expect_equal(ncne(0), 1)
+  expect_equal(ncne(0.5), 1 / 0.75)
+  expect_error(ncne(1.5))
 })

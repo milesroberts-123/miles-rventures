@@ -29,6 +29,17 @@ test_that("corr_ci_autocorr errors with fewer than 4 observations", {
   expect_error(corr_ci_autocorr(1:3, 1:3), "at least 4")
 })
 
+test_that("corr_ci_autocorr accepts bias_correct argument for interface parity", {
+  set.seed(1)
+  x <- rnorm(100)
+  y <- rnorm(100)
+  out_default <- corr_ci_autocorr(x, y)
+  out_flag <- corr_ci_autocorr(x, y, bias_correct = TRUE)
+  out_off <- corr_ci_autocorr(x, y, bias_correct = FALSE)
+  expect_equal(out_default$r, out_flag$r)
+  expect_equal(out_flag$r, out_off$r)
+})
+
 test_that("lm_sim returns a scalar", {
   set.seed(1)
   out <- lm_sim(100, -10, 10)
@@ -100,4 +111,52 @@ test_that("train_abc errors when abc is not installed", {
     ),
     "abc package is required"
   )
+})
+
+# ---------------------------------------------------------------------------
+# Ported: rm_na_after_na, conv_cor_wn_env, replicate_gt extras
+# (from grenenet-phase2 resources/R/tests.R)
+# ---------------------------------------------------------------------------
+
+test_that("conv_cor_wn_env returns a length-2 vector: numerator and denominator", {
+  set.seed(42)
+  pdiff <- matrix(rnorm(30), nrow = 5, ncol = 6)
+  result <- conv_cor_wn_env(pdiff)
+  expect_equal(length(result), 2)
+})
+
+test_that("conv_cor_wn_env returns numerator smaller than denominator", {
+  set.seed(99)
+  pdiff <- matrix(rnorm(60), nrow = 10, ncol = 6)
+  result <- conv_cor_wn_env(pdiff)
+  expect_true(abs(result[1]) <= result[2])
+})
+
+test_that("conv_cor_wn_env works with matrices of varying sizes", {
+  set.seed(7)
+  pdiff_4x3 <- matrix(rnorm(12), nrow = 4, ncol = 3)
+  result <- conv_cor_wn_env(pdiff_4x3)
+  expect_equal(length(result), 2)
+})
+
+test_that("conv_cor_wn_env returns positive numerator for positively correlated data", {
+  set.seed(123)
+  a <- rnorm(10, mean = 0, sd = 1)
+  b <- a + rnorm(10, mean = 0, sd = 0.1)
+  pdiff <- cbind(a, b)
+  result <- conv_cor_wn_env(pdiff)
+  expect_true(result[1] > 0)
+})
+
+test_that("conv_cor_wn_env returns negative numerator for negatively correlated data", {
+  set.seed(123)
+  a <- rnorm(10, mean = 0, sd = 1)
+  b <- -1 * a + rnorm(10, mean = 0, sd = 0.1)
+  pdiff <- cbind(a, b)
+  result <- conv_cor_wn_env(pdiff)
+  expect_true(result[1] < 0)
+})
+
+test_that("conv_cor_wn_env requires matrix input with ncol > 1 and nrow > 1", {
+  expect_error(conv_cor_wn_env(c(1, 2, 3)))
 })
