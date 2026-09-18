@@ -222,3 +222,145 @@ csv_to_parquet <- function(csv_path, parquet_dir,
   }
   arrow::open_dataset(parquet_dir)
 }
+
+# ---------------------------------------------------------------------------
+# Block construction and window helpers (ported from grenenet-phase2)
+# ---------------------------------------------------------------------------
+
+#' Block data by chromosome and position
+#'
+#' Assigns each row of a sorted variant table to a block, computed either by
+#' SNP count or by physical distance, and never across chromosome boundaries.
+#'
+#' @param data Data frame with chromosome and position columns.
+#' @param chrom_col_name Chromosome column (tidy-evaluated).
+#' @param pos_col_name Position column (tidy-evaluated).
+#' @param window_size Block size: SNPs per block if `block_by = "snp"`, base
+#'   pairs per block if `block_by = "base"`.
+#' @param sep Separator pasted between chromosome and block index to form
+#'   the `window` label.
+#' @param block_by Either `"snp"` (fixed number of SNPs per block) or
+#'   `"base"` (fixed physical span per block).
+#'
+#' @return `data` with columns `block` (block index within chromosome) and
+#'   `window` (chromosome-sep-block label).
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' blocks <- create_blocks(snp_table, chrom, pos, 15000,
+#'                         block_by = "snp", sep = "_")
+#' }
+create_blocks <- function(data,
+                          chrom_col_name,
+                          pos_col_name,
+                          window_size,
+                          sep,
+                          block_by = "snp") {
+  # check data is sorted
+  sort_check <- data %>%
+    group_by({{ chrom_col_name }}) %>%
+    summarise(is_sorted = all(diff({{ pos_col_name }}) >= 0))
+
+  if (!all(sort_check$is_sorted)) {
+    stop("Input data should be sorted by position within chromosome.")
+  }
+
+  if (block_by == "snp") {
+    blocks <- data %>%
+      group_by({{ chrom_col_name }}) %>%
+      mutate(
+        block = (row_number() - 1) %/% window_size + 1,
+        window = paste({{ chrom_col_name }}, block, sep = sep)
+      )
+  } else if (block_by == "base") {
+    blocks <- data %>%
+      group_by({{ chrom_col_name }}) %>%
+      mutate(
+        bin_start = ({{ pos_col_name }} %/% window_size) * window_size,
+        bin_end = bin_start + window_size,
+        block = ({{ pos_col_name }} %/% window_size),
+        window = paste({{ chrom_col_name }}, block, sep = sep)
+      )
+  } else {
+    stop("block_by not valid. Choose from: snp, base.")
+  }
+
+  return(blocks)
+}
+
+#' Grab sample sizes for a subset of samples
+#'
+#' Subsets a sample-size table to the requested samples, prepends the
+#' generation-0 size, and sorts by sample label.
+#'
+#' @param n_data Data frame with a sample-label column and a sample-size
+#'   column.
+#' @param sample_col Sample-label column (tidy-evaluated).
+#' @param samples Character vector of sample labels to keep.
+#' @param first_n Sample size to prepend for generation 0.
+#' @param n_col Sample-size column (tidy-evaluated).
+#'
+#' @return A data frame with two columns (sample label and size), the first
+#'   row holding the generation-0 entry.
+#' @export
+grab_sample_sizes <- function(n_data, sample_col, samples, first_n, n_col) {
+  rep_n <- n_data %>% dplyr::filter({{ sample_col }} %in% samples)
+  rep_n <- rbind(c(0, first_n), rep_n %>% select({{ sample_col }}, {{ n_col }}))
+  rep_n <- rep_n %>% arrange({{ sample_col }})
+  return(rep_n)
+}
+
+# ---------------------------------------------------------------------------
+# Polynomial helpers (ported from grenenet-phase2 resources/R/misc.R)
+# ---------------------------------------------------------------------------
+
+#' Fit polynomial to data
+#'
+#' Fits polynomials of degree 1 through `max_degree` by ordinary least
+#' squares and returns the model with the lowest AIC.
+#'
+#' @param data Data frame holding the predictor and response columns.
+#' @param x_col Name of the predictor column, as a string.
+#' @param y_col Name of the response column, as a string.
+#' @param max_degree Highest polynomial degree to consider (default 10).
+#'
+#' @return The best-fitting `lm` object.
+#' @export
+find_best_poly <- function(data, x_col, y_col, max_degree = 10) {
+  x_val <- data[[x_col]]
+  y_val <- data[[y_col]]
+
+  models <- lapply(1:max_degree, function(d) {
+    lm(y_val ~ poly(x_val, d, raw = TRUE))
+  })
+  aics <- sapply(models, AIC)
+
+  best_idx <- which.min(aics)
+  best_model <- models[[best_idx]]
+
+  return(best_model)
+}
+
+#' Evaluate derivative of a raw-polynomial model at a point
+#'
+#' Extracts the coefficients of a raw (`raw = TRUE`) polynomial fit and
+#' evaluates its derivative at `x_eval`.
+#'
+#' @param model An `lm` object fitted with `poly(x, d, raw = TRUE)`.
+#' @param x_eval Numeric value at which to evaluate the derivative.
+#'
+#' @return A single numeric value: the derivative of the fitted polynomial
+#'   at `x_eval`.
+#' @export
+eval_deriv <- function(model, x_eval) {
+  beta <- coef(model)
+  deriv_val <- 0
+  if (length(beta) > 1) {
+    for (i in 2:length(beta)) {
+      deg <- i - 1
+      deriv_val <- deriv_val + (deg * beta[i] * (x_eval ^ (deg - 1)))
+    }
+  }
+  return(as.numeric(deriv_val))
+}

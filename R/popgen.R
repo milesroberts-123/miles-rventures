@@ -43,7 +43,7 @@ fitfreq <- function(q, h, s) {
 WF_sel <- function(N, q, h, s, G) {
   if (length(s) == 1) {
     s <- rep(s, G - 1)
-  } else if (length(s) != G - 1) {
+  } else if (length(s) < G - 1) {
     stop("s must be a scalar or a vector of length G - 1.")
   }
 
@@ -720,25 +720,27 @@ rm_na_after_na <- function(x) {
 
 #' Arcsine-square root transform of allele frequencies
 #'
-#' Applies the variance-stabilizing arcsine-square root transformation,
-#' `asin(sqrt(x))`, commonly used before temporal analyses of allele
+#' Applies the variance-stabilizing arcsine-square root transformation
+#' `C * asin(sqrt(p))`, commonly used before temporal analyses of allele
 #' frequencies.
 #'
-#' @param x Numeric vector of values in \code{[0, 1]}; NA entries pass
+#' @param p Numeric vector of values in \code{[0, 1]}; NA entries pass
 #'   through as NA.
+#' @param C Scaling constant (default 2, following Kelly 2022,
+#'   Evolution Letters).
 #'
-#' @return The transformed numeric vector, in \code{[0, pi/2]}.
+#' @return The transformed numeric vector, in \code{[0, C * pi/2]}.
 #' @export
 #'
 #' @examples
 #' arcsin_sqrt(c(0, 0.5, 1))
-arcsin_sqrt <- function(x) {
+arcsin_sqrt <- function(p, C = 2) {
   stopifnot(
-    is.numeric(x),
-    all(x >= 0, na.rm = TRUE),
-    all(x <= 1, na.rm = TRUE)
+    is.numeric(p),
+    all(p >= 0, na.rm = TRUE),
+    all(p <= 1, na.rm = TRUE)
   )
-  asin(sqrt(x))
+  C * asin(sqrt(p))
 }
 
 #' Sign permute a block of allele frequency changes
@@ -1633,4 +1635,165 @@ fit_af_glm <- function(freq_mat, sample_meta, snp_coords = NULL, p0 = NULL,
                drop = FALSE]
   }
   out
+}
+
+# ---------------------------------------------------------------------------
+# Linked-selection estimators (ported from grenenet-phase2 resources/R/gt.R)
+# ---------------------------------------------------------------------------
+
+#' Sum of heterozygosity by time point
+#'
+#' Applies [sum_of_het()] to each column of an allele-frequency matrix and
+#' returns the results as a data frame, extracting the time label from the
+#' column names (assumed of the form `..._<t>_...`).
+#'
+#' @param pmat Numeric matrix of allele frequencies; one column per time
+#'   point, with column names encoding the time label between underscores.
+#'
+#' @return A data frame with columns `t` (time label) and `sum_of_het`.
+#' @export
+#'
+#' @examples
+#' pmat <- matrix(rep(0.5, 6), nrow = 2,
+#'                dimnames = list(NULL, c("site_1", "site_2", "site_3")))
+#' sum_of_het_by_t(pmat)
+sum_of_het_by_t <- function(pmat) {
+  sum_of_het_vec <- apply(pmat, MARGIN = 2, FUN = sum_of_het)
+  sum_of_het_vec <- data.frame(
+    t = names(sum_of_het_vec),
+    sum_of_het = as.numeric(sum_of_het_vec)
+  )
+  sum_of_het_vec$t <- gsub("_", "", stringr::str_extract(sum_of_het_vec$t, "_.*_"))
+  return(sum_of_het_vec)
+}
+
+#' Compile table of values in windows for Buffalo and Coop 2019 Ne and VA(1)
+#' estimation
+#'
+#' Melts the covariance matrix of allele-frequency changes, labels each entry
+#' by its source and destination interval, and attaches the heterozygosity
+#' ratios and window-level constants used by the Buffalo & Coop (2019)
+#' linked-selection estimator.
+#'
+#' @param pmat Numeric matrix of allele frequencies excluding the last time
+#'   point: one column per interval, holding the frequency at the start of
+#'   that interval.
+#' @param sum_of_het_vec Data frame from [sum_of_het_by_t()].
+#' @param sum_of_het_1 Scalar: summed heterozygosity of the first time point.
+#' @param n Numeric vector of sample sizes, one per time point.
+#' @param mean_ld Scalar: mean LD (r^2) within the window.
+#' @param weight Scalar: weight of the window in the pooled analysis.
+#'
+#' @return A data frame, one row per unique covariance-matrix value, with the
+#'   melted Var1/Var2/value columns, interval labels `s` and `t`, the
+#'   variance indicator `b`, the heterozygosity ratio `sum_of_het_ratio`,
+#'   the per-window coefficient `a`, and the window-level constants.
+#' @export
+estim_linked_selection_params <- function(pmat, sum_of_het_vec, sum_of_het_1,
+                                          n, mean_ld, weight) {
+  covmat <- covmat_from_pmat(pmat, n)
+  X <- reshape2::melt(covmat)
+  X <- X[!duplicated(X$value), ]
+  X$t <- gsub("_", "", stringr::str_extract(X$Var2, "_.*_"))
+  X$s <- gsub("_", "", stringr::str_extract(X$Var1, "_.*_"))
+  X$b <- as.numeric(X$t == X$s)
+  X <- merge(X, sum_of_het_vec, by = "t")
+  X <- merge(X, sum_of_het_vec, by.x = "s", by.y = "t", suffixes = c("_t", "_s"))
+  X$sum_of_het_ratio <- X$sum_of_het_s / sum_of_het_1
+  X$a <- X$sum_of_het_ratio * 0.5 * mean_ld * weight
+  X$mean_ld <- mean_ld
+  X$weight <- weight
+  X$sum_of_het_1 <- sum_of_het_1
+  return(X)
+}
+
+#' Compile table of values in windows for Buffalo and Coop 2019 Ne and VA(1)
+#' estimation, with heterozygosity standardization
+#'
+#' As [estim_linked_selection_params()], but the covariance matrix is
+#' standardized by heterozygosity before melting.
+#'
+#' @param pmat Numeric matrix of allele frequencies excluding the last time
+#'   point: one column per interval, holding the frequency at the start of
+#'   that interval.
+#' @param n Numeric vector of sample sizes, one per time point.
+#' @param sum_of_het_vec Data frame from [sum_of_het_by_t()].
+#' @param sum_of_het_1 Scalar: summed heterozygosity of the first time point.
+#' @param mean_ld Scalar: mean LD (r^2) within the window.
+#' @param weight Scalar: weight of the window in the pooled analysis.
+#' @param correct_for_n Logical; apply the sample-size correction
+#'   (default TRUE).
+#'
+#' @return A data frame, one row per unique covariance-matrix value, with the
+#'   melted Var1/Var2/value columns, interval labels `s` and `t`, the
+#'   variance indicator `b`, the heterozygosity ratio `sum_of_het_ratio`,
+#'   the per-window coefficient `a`, and the window-level constants.
+#' @export
+estim_linked_selection_params_new <- function(pmat, n, sum_of_het_vec,
+                                              sum_of_het_1, mean_ld, weight,
+                                              correct_for_n = TRUE) {
+  covmat <- covmat_from_pmat(pmat, n = n, correct_for_n = correct_for_n,
+                             standard_by_het = TRUE)
+  if (is.null(rownames(covmat))) {
+    rownames(covmat) = colnames(pmat)[2]
+    colnames(covmat) = colnames(pmat)[2]
+  }
+  X <- reshape2::melt(covmat)
+  X <- X[!duplicated(X$value), ]
+  X$t <- gsub("_", "", stringr::str_extract(X$Var2, "_.*_"))
+  X$s <- gsub("_", "", stringr::str_extract(X$Var1, "_.*_"))
+  X$b <- as.numeric(X$t == X$s)
+  X <- merge(X, sum_of_het_vec, by = "t")
+  X <- merge(X, sum_of_het_vec, by.x = "s", by.y = "t", suffixes = c("_t", "_s"))
+  X$sum_of_het_ratio <- X$sum_of_het_s / sum_of_het_1
+  X$a <- (X$sum_of_het_ratio) * 0.5 * mean_ld * weight
+  X$mean_ld <- mean_ld
+  X$weight <- weight
+  X$sum_of_het_1 <- sum_of_het_1
+  return(X)
+}
+
+#' Allele frequency trajectory under selection and drift
+#'
+#' Simulation of the signature of positive selection on standing genetic
+#' variation (Przeworski 2005): each generation the deterministic selection
+#' step is followed by a drift step whose standard deviation is
+#' `sqrt(p (1 - p) dt)` with `dt = 1 / (4 N)`.
+#'
+#' @param p0 Initial allele frequency.
+#' @param N Population size.
+#' @param s Selection coefficient.
+#' @param t Number of generations to simulate.
+#'
+#' @return Numeric vector of length `t + 1`: the allele-frequency trajectory.
+#' @export
+simulate_freq_traj <- function(p0, N, s, t) {
+  traj <- c(p0)
+  p_i <- p0
+  dt <- 1 / (4 * N)
+  for (i in 1:t) {
+    rng <- runif(1)
+    if (rng > 0.5) {
+      p_next <- p_i + 2 * N * s * p_i * (1 - p_i) * dt - sqrt(p_i * (1 - p_i) * dt)
+    } else {
+      p_next <- p_i + 2 * N * s * p_i * (1 - p_i) * dt + sqrt(p_i * (1 - p_i) * dt)
+    }
+    traj <- c(traj, p_next)
+    p_i <- p_next
+  }
+  return(traj)
+}
+
+#' Nc/Ne ratio from selfing rate, Pollak 1987
+#'
+#' @param s Selfing rate in \code{[0, 1]}.
+#'
+#' @return The ratio of the census size to the effective size.
+#' @export
+#'
+#' @examples
+#' ncne(0.5)
+ncne <- function(s) {
+  stopifnot(is.numeric(s), s >= 0, s <= 1)
+  1 / (1 - s / 2)
 }

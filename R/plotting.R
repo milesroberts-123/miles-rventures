@@ -458,3 +458,184 @@ plot_var_cov_matrix <- function(covmat,
   plot_cor + ggplot2::coord_fixed() +
     ggplot2::labs(x = "", y = "")
 }
+
+# ---------------------------------------------------------------------------
+# Per-project plot helpers (ported from grenenet-phase2 resources/R/plot.R)
+# ---------------------------------------------------------------------------
+
+#' Save a ggplot and its RDS object
+#'
+#' Saves a ggplot object to an image file and the plot object itself to an
+#' RDS file, both derived from `base_path`. Extra arguments (e.g. `width`,
+#' `height`) are passed to [ggplot2::ggsave()].
+#'
+#' @param plot_obj A ggplot object.
+#' @param base_path Path without extension; the image is written to
+#'   `<base_path>.<img_ext>` and the object to `<base_path>.rds`.
+#' @param img_ext Image file extension (default "png").
+#' @param ... Extra arguments passed to [ggplot2::ggsave()].
+#'
+#' @return Invisibly, NULL.
+#' @export
+save_plot_and_object <- function(plot_obj, base_path, img_ext = "png", ...) {
+  img_filename <- paste0(base_path, ".", img_ext)
+  rds_filename <- paste0(base_path, ".rds")
+
+  ggplot2::ggsave(filename = img_filename, plot = plot_obj, ...)
+
+  saveRDS(plot_obj, file = rds_filename)
+
+  invisible(NULL)
+}
+
+#' Plot Manhattan plot per site from a SNP table of stats
+#'
+#' Filters `data` to one site, computes cumulative base-pair positions
+#' across chromosomes, and saves a per-site Manhattan plot as JPG (and
+#' optionally PDF) under `../results/by-date/<today>/`.
+#'
+#' @param data Data frame with columns `SITE`, `CHROM`, `POS`, and
+#'   `pvalue`.
+#' @param site Site label to filter on.
+#' @param today Date label used in the output path.
+#' @param height Plot height in inches.
+#' @param width Plot width in inches.
+#' @param quick Logical; if TRUE, subset to pvalue < 0.001 before plotting.
+#' @param save_pdf Logical; also save a PDF copy (default TRUE).
+#' @param prefix Prefix for output file names.
+#'
+#' @return Invisibly, NULL.
+#' @export
+plot_manhattan_by_site <- function(data, site, today, height, width,
+                                   quick = FALSE, save_pdf = TRUE, prefix) {
+  print(site)
+
+  print("Filter data to one site...")
+  data <- data |>
+    subset(SITE == site)
+
+  if (quick) {
+    print("Subset insignificant data...")
+    data <- data |>
+      subset(pvalue < 0.001)
+  }
+
+  print("Compute variables...")
+  don <- data %>%
+    group_by(CHROM) %>%
+    summarise(chr_len = max(POS)) %>%
+    mutate(tot = cumsum(chr_len) - chr_len) %>%
+    dplyr::select(-chr_len) %>%
+    left_join(data, ., by = c("CHROM" = "CHROM")) %>%
+    arrange(CHROM, POS) %>%
+    mutate(BPcum = POS + tot)
+
+  axisdf <- don %>%
+    group_by(CHROM) %>%
+    summarize(center = (max(BPcum) + min(BPcum)) / 2)
+
+  print("Plot...")
+  ggplot(don, aes(x = BPcum, y = -log10(pvalue))) +
+    geom_point(aes(color = as.factor(CHROM)), alpha = 0.8, size = 1.3, shape = 16) +
+    geom_point(data = subset(don, highlight == "yes"), color = "orange", size = 1.5) +
+    scale_color_manual(values = rep(c("grey", "black"), 22)) +
+    scale_x_continuous(label = axisdf$CHROM, breaks = axisdf$center) +
+    scale_y_continuous(expand = c(0, 0)) +
+    theme(
+      legend.position = "none",
+      panel.border = ggplot2::element_blank(),
+      panel.grid.major.x = ggplot2::element_blank(),
+      panel.grid.minor.x = ggplot2::element_blank()
+    ) +
+    labs(x = "Chromosome", y = "-log10(p)", title = paste("Site #", site, sep = " "))
+
+  print("Save png...")
+  ggplot2::ggsave(paste("../results/by-date/", today, "/", prefix, "_", site, ".jpg", sep = ""),
+                  height = height, width = width)
+
+  if (save_pdf) {
+    print("Save pdf...")
+    ggplot2::ggsave(paste("../results/by-date/", today, "/", prefix, "_", site, ".pdf", sep = ""),
+                    height = height, width = width)
+  }
+
+  invisible(NULL)
+}
+
+#' Plot a heatmap from a pre-melted table of pair statistics
+#'
+#' Draws a tiled heatmap of pairwise values (e.g. correlations between
+#' intervals) with a scico palette, optionally marking entries whose
+#' confidence interval excludes zero.
+#'
+#' @param melted_cormat Data frame with columns `Var2`, `Var1`, `value`.
+#' @param Var2 Column mapped to the x axis (tidy-evaluated).
+#' @param Var1 Column mapped to the y axis (tidy-evaluated).
+#' @param value Column mapped to the fill (tidy-evaluated).
+#' @param include_values Logical; mark entries with `*` when their interval
+#'   `[lwr, upr]` excludes zero.
+#' @param lwr,upr Lower and upper confidence-bound columns in
+#'   `melted_cormat` (required if `include_values = TRUE`).
+#' @param scico_palette Name of the scico palette.
+#' @param midpoint Value at which the palette is centred.
+#' @param direction Palette direction.
+#' @param height,height Plot height in inches.
+#' @param width Plot width in inches.
+#' @param legend_name Legend title.
+#' @param output_name Path to the output figure.
+#'
+#' @return Invisibly, the ggplot object.
+#' @export
+plot_pairs_heatmap <- function(melted_cormat,
+                               Var2,
+                               Var1,
+                               value,
+                               include_values = FALSE,
+                               lwr,
+                               upr,
+                               scico_palette,
+                               midpoint = 0,
+                               direction = 1,
+                               height,
+                               width,
+                               legend_name,
+                               output_name) {
+
+  plot_cor <- ggplot2::ggplot(data = melted_cormat,
+                     aes({{ Var2 }}, {{ Var1 }}, fill = {{ value }})) +
+    ggplot2::geom_tile(color = "white")
+
+  plot_cor <- plot_cor + scico::scale_fill_scico(
+    palette = scico_palette,
+    midpoint = midpoint,
+    direction = direction,
+    space = "Lab",
+    name = legend_name
+  ) +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      axis.text.x = ggplot2::element_text(
+        angle = 45,
+        vjust = 1,
+        hjust = 1
+      ),
+      text = ggplot2::element_text(size = 14, family = "Helvetica")
+    ) +
+    ggplot2::coord_fixed() +
+    ggplot2::labs(x = "", y = "")
+
+  if (include_values) {
+    plot_cor <- plot_cor + ggplot2::geom_text(ggplot2::aes(label = if_else((lwr < 0) & (upr > 0), "", "*")),
+                                     color = "white",
+                                     size = 8,
+                                     vjust = 0.8)
+  }
+
+  ggplot2::ggsave(output_name,
+         plot_cor,
+         height = height,
+         width = width,
+         bg = "white")
+
+  invisible(plot_cor)
+}
