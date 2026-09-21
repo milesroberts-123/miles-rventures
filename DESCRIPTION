@@ -1,7 +1,8 @@
 Package: rventures
 Title: Convenience Functions for RStudio Projects
 Version: 0.1.0
-Authors@R: person("Miles", "Roberts", role = c("aut", "cre"))
+Authors@R: person("Miles", "Roberts", email = "milesdroberts@gmail.com",
+    role = c("aut", "cre"))
 Description: A collection of convenience functions for use across RStudio
     projects.
 License: MIT + file LICENSE
