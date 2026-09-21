@@ -212,8 +212,9 @@ test_that("create_blocks snp mode assigns fixed SNP counts per block", {
   d <- data.frame(chrom = c(1, 1, 1, 1, 1, 2, 2),
                   pos = c(10, 20, 30, 40, 50, 10, 20))
   blocks <- create_blocks(d, chrom, pos, window_size = 2, sep = "_", block_by = "snp")
-  expect_equal(blocks$block, c(1, 1, 2, 2, 3, 1, 2))
-  expect_equal(blocks$window, c("1_1", "1_1", "1_2", "1_2", "1_3", "2_1", "2_2"))
+  # block index restarts per chromosome: (row_number() - 1) %/% 2 + 1
+  expect_equal(blocks$block, c(1, 1, 2, 2, 3, 1, 1))
+  expect_equal(blocks$window, c("1_1", "1_1", "1_2", "1_2", "1_3", "2_1", "2_1"))
 })
 
 test_that("create_blocks base mode bins by physical distance", {
@@ -241,10 +242,12 @@ test_that("grab_sample_sizes prepends first_n and sorts", {
   n_data <- data.frame(pool = c("A_1", "B_1", "A_2"),
                        n = c(100, 200, 150))
   out <- grab_sample_sizes(n_data, pool, c("A_1", "A_2"), 10000, n)
-  expect_equal(nrow(out), 2)
-  expect_equal(out$pool, c("A_1", "A_2"))
-  expect_equal(out$n, c(100, 150))
-  expect_equal(out[1, ], c("0", 10000))
+  # prepended generation-0 row + 2 matched samples, sorted by pool label
+  expect_equal(nrow(out), 3)
+  expect_equal(out$pool, c("0", "A_1", "A_2"))
+  expect_equal(out$n, c(10000, 100, 150))
+  expect_equal(out[1, ]$pool, "0")
+  expect_equal(out[1, ]$n, 10000)
 })
 
 test_that("find_best_poly picks a low degree for a linear signal", {

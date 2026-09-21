@@ -259,8 +259,8 @@ create_blocks <- function(data,
                           block_by = "snp") {
   # check data is sorted
   sort_check <- data %>%
-    group_by({{ chrom_col_name }}) %>%
-    summarise(is_sorted = all(diff({{ pos_col_name }}) >= 0))
+    dplyr::group_by({{ chrom_col_name }}) %>%
+    dplyr::summarise(is_sorted = all(diff({{ pos_col_name }}) >= 0))
 
   if (!all(sort_check$is_sorted)) {
     stop("Input data should be sorted by position within chromosome.")
@@ -268,15 +268,15 @@ create_blocks <- function(data,
 
   if (block_by == "snp") {
     blocks <- data %>%
-      group_by({{ chrom_col_name }}) %>%
-      mutate(
-        block = (row_number() - 1) %/% window_size + 1,
+      dplyr::group_by({{ chrom_col_name }}) %>%
+      dplyr::mutate(
+        block = (dplyr::row_number() - 1) %/% window_size + 1,
         window = paste({{ chrom_col_name }}, block, sep = sep)
       )
   } else if (block_by == "base") {
     blocks <- data %>%
-      group_by({{ chrom_col_name }}) %>%
-      mutate(
+      dplyr::group_by({{ chrom_col_name }}) %>%
+      dplyr::mutate(
         bin_start = ({{ pos_col_name }} %/% window_size) * window_size,
         bin_end = bin_start + window_size,
         block = ({{ pos_col_name }} %/% window_size),
@@ -306,8 +306,8 @@ create_blocks <- function(data,
 #' @export
 grab_sample_sizes <- function(n_data, sample_col, samples, first_n, n_col) {
   rep_n <- n_data %>% dplyr::filter({{ sample_col }} %in% samples)
-  rep_n <- rbind(c(0, first_n), rep_n %>% select({{ sample_col }}, {{ n_col }}))
-  rep_n <- rep_n %>% arrange({{ sample_col }})
+  rep_n <- rbind(c(0, first_n), rep_n %>% dplyr::select({{ sample_col }}, {{ n_col }}))
+  rep_n <- rep_n %>% dplyr::arrange({{ sample_col }})
   return(rep_n)
 }
 

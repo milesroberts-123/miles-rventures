@@ -522,17 +522,17 @@ plot_manhattan_by_site <- function(data, site, today, height, width,
 
   print("Compute variables...")
   don <- data %>%
-    group_by(CHROM) %>%
-    summarise(chr_len = max(POS)) %>%
-    mutate(tot = cumsum(chr_len) - chr_len) %>%
+    dplyr::group_by(CHROM) %>%
+    dplyr::summarise(chr_len = max(POS)) %>%
+    dplyr::mutate(tot = cumsum(chr_len) - chr_len) %>%
     dplyr::select(-chr_len) %>%
-    left_join(data, ., by = c("CHROM" = "CHROM")) %>%
-    arrange(CHROM, POS) %>%
-    mutate(BPcum = POS + tot)
+    dplyr::left_join(data, ., by = c("CHROM" = "CHROM")) %>%
+    dplyr::arrange(CHROM, POS) %>%
+    dplyr::mutate(BPcum = POS + tot)
 
   axisdf <- don %>%
-    group_by(CHROM) %>%
-    summarize(center = (max(BPcum) + min(BPcum)) / 2)
+    dplyr::group_by(CHROM) %>%
+    dplyr::summarize(center = (max(BPcum) + min(BPcum)) / 2)
 
   print("Plot...")
   ggplot(don, aes(x = BPcum, y = -log10(pvalue))) +
