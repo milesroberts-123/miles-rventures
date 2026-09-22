@@ -4,12 +4,16 @@
 \alias{corr_ci_autocorr}
 \title{Confidence interval for a Pearson correlation, adjusted for AR(1) autocorrelation}
 \usage{
-corr_ci_autocorr(x, y, conf = 0.95)
+corr_ci_autocorr(x, y, conf = 0.95, bias_correct = TRUE)
 }
 \arguments{
 \item{x, y}{Numeric vectors of equal length (paired observations).}
 
 \item{conf}{Confidence level (default 0.95).}
+
+\item{bias_correct}{Logical; accepted for interface compatibility with
+earlier versions of this helper. The lag-1 autocorrelation estimate
+used here is the standard (uncorrected) sample ACF in all cases.}
 }
 \value{
 A list with the correlation, effective sample size, CI bounds,

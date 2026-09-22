@@ -181,6 +181,70 @@ test_that("plot_manhattan adds an orange highlight layer only when the column ex
   expect_identical(p_h$layers[[2]]$aes_params$colour, "orange")
 })
 
+test_that("plot_manhattan point colors are customizable", {
+  skip_if_not_installed("ggplot2")
+  # default stays grey/black, alternating by chromosome
+  p <- plot_manhattan(make_test_snp_table())
+  expect_identical(
+    sort(unique(ggplot2::ggplot_build(p)$data[[1]]$colour)),
+    c("black", "grey")
+  )
+  chr_colors <- ggplot2::ggplot_build(p)$data[[1]]$colour
+  expect_identical(chr_colors[1], "grey")
+  expect_identical(chr_colors[6], "black")
+  expect_identical(chr_colors[9], "grey")
+
+  # two custom colors cycle across the three chromosomes (chrA/chrC = first
+  # color, chrB = second)
+  p2 <- plot_manhattan(make_test_snp_table(), point_colors = c("red", "blue"))
+  build2 <- ggplot2::ggplot_build(p2)$data[[1]]$colour
+  expect_identical(unique(build2[c(1, 9)]), "red")
+  expect_identical(unique(build2[6]), "blue")
+  scale_values <- ggplot2::ggplot_build(p2)$plot$scales$scales[[1]]$palette(
+    nlevels(factor(p2$data$CHROM))
+  )
+  expect_identical(scale_values, c("red", "blue", "red"))
+
+  # a single color makes all chromosomes uniform
+  p3 <- plot_manhattan(make_test_snp_table(), point_colors = "green")
+  expect_identical(
+    unique(ggplot2::ggplot_build(p3)$data[[1]]$colour),
+    "green"
+  )
+})
+
+test_that("plot_manhattan highlight color is customizable and points use shape 16", {
+  skip_if_not_installed("ggplot2")
+  snp_h <- make_test_snp_table()
+  snp_h$highlight <- c(rep("no", 9), "yes")
+  p_h <- plot_manhattan(snp_h, highlight_color = "purple")
+  expect_identical(p_h$layers[[2]]$aes_params$colour, "purple")
+
+  # both layers draw solid filled circles (shape 16, no border stroke)
+  expect_identical(p_h$layers[[1]]$aes_params$shape, 16)
+  expect_identical(p_h$layers[[2]]$aes_params$shape, 16)
+})
+
+test_that("plot_manhattan errors on invalid color arguments", {
+  skip_if_not_installed("ggplot2")
+  expect_error(
+    plot_manhattan(make_test_snp_table(), point_colors = character(0)),
+    "point_colors must be a non-empty character vector"
+  )
+  expect_error(
+    plot_manhattan(make_test_snp_table(), point_colors = 1),
+    "point_colors must be a non-empty character vector"
+  )
+  expect_error(
+    plot_manhattan(make_test_snp_table(), highlight_color = c("red", "blue")),
+    "highlight_color must be a single color name"
+  )
+  expect_error(
+    plot_manhattan(make_test_snp_table(), highlight_color = 1),
+    "highlight_color must be a single color name"
+  )
+})
+
 test_that("plot_manhattan errors on empty data or missing columns", {
   skip_if_not_installed("ggplot2")
   expect_error(

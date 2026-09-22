@@ -234,10 +234,15 @@ plot_paf_dotplot <- function(paf, q_seq, t_seq, xlab, ylab, title,
 #'
 #' @param data A data frame (or tibble) with columns `CHROM`, `POS`, and
 #'   `pvalue`. An optional `highlight` column (`"yes"` marks points to
-#'   overplot in orange) is used if present.
+#'   overplot in `highlight_color`) is used if present.
 #' @param xlab X-axis label (default `"Chromosome"`).
 #' @param ylab Y-axis label (default `"-log10(p)"`).
 #' @param title Plot title.
+#' @param point_colors Character vector of colors to cycle through the
+#'   chromosomes (default `c("grey", "black")`). A single color gives all
+#'   chromosomes the same color.
+#' @param highlight_color Single color for the `highlight == "yes"`
+#'   overplotted points (default `"orange"`).
 #'
 #' @return A ggplot object. Save it with [save_plot()].
 #' @export
@@ -250,7 +255,9 @@ plot_paf_dotplot <- function(paf, q_seq, t_seq, xlab, ylab, title,
 #' )
 #' plot_manhattan(snp_table, title = "Demo Manhattan plot")
 plot_manhattan <- function(data, xlab = "Chromosome", ylab = "-log10(p)",
-                           title = NULL) {
+                           title = NULL,
+                           point_colors = c("grey", "black"),
+                           highlight_color = "orange") {
   required_cols <- c("CHROM", "POS", "pvalue")
   missing_cols <- setdiff(required_cols, names(data))
   if (length(missing_cols) > 0) {
@@ -258,6 +265,12 @@ plot_manhattan <- function(data, xlab = "Chromosome", ylab = "-log10(p)",
   }
   if (nrow(data) == 0) {
     stop("No SNPs in 'data'.")
+  }
+  if (!is.character(point_colors) || length(point_colors) == 0) {
+    stop("point_colors must be a non-empty character vector of colors.")
+  }
+  if (!is.character(highlight_color) || length(highlight_color) != 1) {
+    stop("highlight_color must be a single color name.")
   }
 
   # Cumulative base-pair offset per chromosome, in order of first appearance
@@ -291,7 +304,7 @@ plot_manhattan <- function(data, xlab = "Chromosome", ylab = "-log10(p)",
       alpha = 0.8, size = 1.3, shape = 16
     ) +
     ggplot2::scale_color_manual(
-      values = rep(c("grey", "black"), length.out = length(unique(don$CHROM)))
+      values = rep(point_colors, length.out = length(unique(don$CHROM)))
     ) +
     ggplot2::scale_x_continuous(
       breaks = axisdf$center,
@@ -310,7 +323,7 @@ plot_manhattan <- function(data, xlab = "Chromosome", ylab = "-log10(p)",
     p <- p + ggplot2::geom_point(
       data = dplyr::filter(don, highlight == "yes"),
       ggplot2::aes(x = BPcum, y = -log10(pvalue)),
-      color = "orange", size = 1.5
+      color = highlight_color, size = 1.5, shape = 16
     )
   }
 
@@ -318,8 +331,7 @@ plot_manhattan <- function(data, xlab = "Chromosome", ylab = "-log10(p)",
 }
 
 # Keep only the upper triangle of a square matrix: the strict lower triangle
-# becomes NA, so it drops out when melting (same as the reshape2::melt recipe
-# this function was ported from).
+# becomes NA, so it drops out when the table is converted to long format.
 get_upper_tri <- function(mat) {
   mat[lower.tri(mat, diag = FALSE)] <- NA
   mat
@@ -388,8 +400,8 @@ plot_var_cov_matrix <- function(covmat,
 
   upper_tri <- get_upper_tri(covmat)
 
-  # Long format in Var1/Var2/value columns, upper-triangle cells only,
-  # same semantics as reshape2::melt(..., na.rm = TRUE)
+  # Long format in Var1/Var2/value columns, upper-triangle cells only
+  # (rows with NA value are dropped)
   melted_cormat <- na.omit(as.data.frame.table(
     upper_tri,
     responseName = "value"

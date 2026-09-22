@@ -4,18 +4,32 @@
 \alias{plot_manhattan}
 \title{Manhattan plot from a snp table of stats}
 \usage{
-plot_manhattan(data, xlab = "Chromosome", ylab = "-log10(p)", title = NULL)
+plot_manhattan(
+  data,
+  xlab = "Chromosome",
+  ylab = "-log10(p)",
+  title = NULL,
+  point_colors = c("grey", "black"),
+  highlight_color = "orange"
+)
 }
 \arguments{
 \item{data}{A data frame (or tibble) with columns \code{CHROM}, \code{POS}, and
 \code{pvalue}. An optional \code{highlight} column (\code{"yes"} marks points to
-overplot in orange) is used if present.}
+overplot in \code{highlight_color}) is used if present.}
 
 \item{xlab}{X-axis label (default \code{"Chromosome"}).}
 
 \item{ylab}{Y-axis label (default \code{"-log10(p)"}).}
 
 \item{title}{Plot title.}
+
+\item{point_colors}{Character vector of colors to cycle through the
+chromosomes (default \code{c("grey", "black")}). A single color gives all
+chromosomes the same color.}
+
+\item{highlight_color}{Single color for the \code{highlight == "yes"}
+overplotted points (default \code{"orange"}).}
 }
 \value{
 A ggplot object. Save it with \code{\link[=save_plot]{save_plot()}}.

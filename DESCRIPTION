@@ -13,7 +13,6 @@ Imports:
     ggplot2 (>= 3.4.0),
     dplyr,
     readr,
-    reshape2,
     stringr,
     rlang,
     scico,

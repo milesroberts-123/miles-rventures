@@ -4,18 +4,21 @@
 \alias{arcsin_sqrt}
 \title{Arcsine-square root transform of allele frequencies}
 \usage{
-arcsin_sqrt(x)
+arcsin_sqrt(p, C = 2)
 }
 \arguments{
-\item{x}{Numeric vector of values in \code{[0, 1]}; NA entries pass
+\item{p}{Numeric vector of values in \code{[0, 1]}; NA entries pass
 through as NA.}
+
+\item{C}{Scaling constant (default 2, following Kelly 2022,
+Evolution Letters).}
 }
 \value{
-The transformed numeric vector, in \code{[0, pi/2]}.
+The transformed numeric vector, in \code{[0, C * pi/2]}.
 }
 \description{
-Applies the variance-stabilizing arcsine-square root transformation,
-\code{asin(sqrt(x))}, commonly used before temporal analyses of allele
+Applies the variance-stabilizing arcsine-square root transformation
+\code{C * asin(sqrt(p))}, commonly used before temporal analyses of allele
 frequencies.
 }
 \examples{

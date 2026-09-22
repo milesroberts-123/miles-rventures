@@ -1692,7 +1692,7 @@ sum_of_het_by_t <- function(pmat) {
 estim_linked_selection_params <- function(pmat, sum_of_het_vec, sum_of_het_1,
                                           n, mean_ld, weight) {
   covmat <- covmat_from_pmat(pmat, n)
-  X <- reshape2::melt(covmat)
+  X <- as.data.frame.table(covmat, responseName = "value")
   X <- X[!duplicated(X$value), ]
   X$t <- gsub("_", "", stringr::str_extract(X$Var2, "_.*_"))
   X$s <- gsub("_", "", stringr::str_extract(X$Var1, "_.*_"))
@@ -1738,7 +1738,7 @@ estim_linked_selection_params_new <- function(pmat, n, sum_of_het_vec,
     rownames(covmat) = colnames(pmat)[2]
     colnames(covmat) = colnames(pmat)[2]
   }
-  X <- reshape2::melt(covmat)
+  X <- as.data.frame.table(covmat, responseName = "value")
   X <- X[!duplicated(X$value), ]
   X$t <- gsub("_", "", stringr::str_extract(X$Var2, "_.*_"))
   X$s <- gsub("_", "", stringr::str_extract(X$Var1, "_.*_"))
