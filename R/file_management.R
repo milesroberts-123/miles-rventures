@@ -29,7 +29,7 @@ check_file_exists <- function(file_name) {
 #' @param x A data frame or matrix to append.
 #' @param output_name Path to the output CSV file.
 #'
-#' @return Invisibly, the return value of [utils::write.table()].
+#' @return Invisibly, the return value of [data.table::fwrite()].
 #' @export
 #'
 #' @examples
@@ -37,13 +37,15 @@ check_file_exists <- function(file_name) {
 #' append_table(data.frame(a = 1, b = 2), "results.csv")
 #' }
 append_table <- function(x, output_name) {
-  utils::write.table(x,
-              output_name,
-              col.names = !file.exists(output_name),
-              append = TRUE,
-              row.names = FALSE,
-              sep = ",",
-              quote = FALSE)
+  if (!is.data.frame(x)) {
+    x <- as.data.frame(x) # silence fwrite's matrix-coercion message
+  }
+  data.table::fwrite(x,
+                     output_name,
+                     col.names = !file.exists(output_name),
+                     append = TRUE,
+                     na = "NA",
+                     quote = FALSE)
 }
 
 #' Read a PAF alignment file

@@ -12,7 +12,7 @@ append_table(x, output_name)
 \item{output_name}{Path to the output CSV file.}
 }
 \value{
-Invisibly, the return value of \code{\link[utils:write.table]{utils::write.table()}}.
+Invisibly, the return value of \code{\link[data.table:fwrite]{data.table::fwrite()}}.
 }
 \description{
 Writes \code{x} to \code{output_name} as a comma-separated row. If the file does not

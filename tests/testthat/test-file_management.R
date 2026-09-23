@@ -20,6 +20,15 @@ test_that("append_table writes header on first call and appends after", {
   expect_length(lines, 3)
 })
 
+test_that("append_table is warning-free and handles matrices and NA", {
+  f <- tempfile(fileext = ".csv")
+  expect_no_warning(append_table(data.frame(a = 1, b = 2), f))
+  expect_no_warning(append_table(data.frame(a = 3, b = 4), f))
+  expect_no_warning(append_table(matrix(5:6, nrow = 1), f))
+  append_table(data.frame(a = NA_real_, b = 7), f)
+  expect_identical(readLines(f), c("a,b", "1,2", "3,4", "5,6", "NA,7"))
+})
+
 test_that("read_paf parses a PAF file correctly", {
   # Real minimap2 output: every line carries a consistent tag block
   paf_lines <- paste(
