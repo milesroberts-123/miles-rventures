@@ -1003,6 +1003,72 @@ test_that("feder_t_test handles NA frequencies and all-NA variants", {
   expect_true(is.na(v2$pvalue))
 })
 
+test_that("feder_t_test pools per replicate: gaps give longer-dt increments", {
+  # R1 sampled at 0, 5, 10; R2 sampled only at 0 and 10.
+  # Old anchor-pairing dropped R2 entirely; per-replicate pooling keeps it.
+  meta <- data.frame(
+    population = "AA",
+    time_point = c(0L, 5L, 10L, 0L, 10L),
+    replicate = c("R1", "R1", "R1", "R2", "R2"),
+    sample_size = 30L
+  )
+  L <- 1
+  p0 <- 0.5
+  p1a <- 0.6; p1b <- 0.4
+  p2a <- 0.3; p2b <- 0.7
+  fm <- freq_matrix(matrix(c(0.5, p1a, p2a, 0.5, p2b), nrow = L,
+                           dimnames = list(NULL, c("AA_0_R1", "AA_5_R1",
+                                                   "AA_10_R1", "AA_0_R2",
+                                                   "AA_10_R2"))))
+  res <- feder_t_test(fm, p0_vec(p0), sample_info(meta))
+  y_R1 <- c((p1a - p0) / sqrt(2 * p0 * (1 - p0) * 5),
+            (p2a - p1a) / sqrt(2 * p1a * (1 - p1a) * 5))
+  y_R2 <- (p2b - p0) / sqrt(2 * p0 * (1 - p0) * 10)
+  expect_equal(res$n, 3)
+  expect_equal(res$ybar, mean(c(y_R1, y_R2)))
+  expect_equal(res$s2, var(c(y_R1, y_R2)))
+})
+
+test_that("feder_t_test increments returns the long-format table", {
+  meta <- data.frame(
+    population = c("AA", "AA", "AA"),
+    time_point = c(0L, 5L, 10L),
+    replicate = "R1",
+    sample_size = 30L
+  )
+  L <- 2
+  fm <- freq_matrix(matrix(c(0.2, 0.4, 0.6, 0.5, 0.3, 0.7), nrow = L,
+                           dimnames = list(NULL, c("AA_0_R1", "AA_5_R1",
+                                                   "AA_10_R1"))))
+  p0 <- p0_vec(c(0.1, 0.3))
+  inc <- feder_t_test(fm, p0, sample_info(meta), increments = TRUE)
+  expect_named(inc, c("population", "replicate", "pool", "yi"))
+  expect_equal(nrow(inc), 2 * L)
+  expect_equal(inc$pool, rep(c("AA_5_R1", "AA_10_R1"), each = L))
+  expect_equal(inc$replicate, rep("R1", 2 * L))
+  p0u <- unclass(p0)
+  p1 <- unlist(fm[, 2]); p2 <- unlist(fm[, 3])
+  y1 <- (p1 - p0u) / sqrt(2 * p0u * (1 - p0u) * 5)
+  y2 <- (p2 - p1) / sqrt(2 * p1 * (1 - p1) * 5)
+  expect_equal(inc$yi, as.numeric(rbind(y1, y2)))
+  # increments mode excludes t = 0 columns and never carries tvalue etc.
+  expect_false(any(grepl("AA_0_R1", inc$pool)))
+  # snp_coords adds CHROM/POS up front
+  coords <- snp_coords(data.frame(chrom = c("1", "1"), pos = c(100, 200)))
+  inc_c <- feder_t_test(fm, p0, sample_info(meta), snp_coords = coords,
+                        increments = TRUE)
+  expect_named(inc_c, c("population", "CHROM", "POS", "replicate", "pool",
+                        "yi"))
+  expect_equal(inc_c$CHROM, rep("1", 2 * L))
+  expect_equal(inc_c$POS, rep(c(100, 200), 2))
+  # summary return unchanged by default
+  res <- feder_t_test(fm, p0, sample_info(meta))
+  expect_named(res, c("population", "ybar", "s2", "n", "df", "tvalue",
+                      "pvalue"))
+  expect_error(feder_t_test(fm, p0, sample_info(meta), increments = NA),
+               "increments must be a single TRUE or FALSE")
+})
+
 test_that("feder_t_test validates inputs", {
   meta <- data.frame(
     population = "AA", time_point = c(0L, 1L), replicate = "R1",

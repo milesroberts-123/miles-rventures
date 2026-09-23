@@ -1269,26 +1269,40 @@ covmat_pop_pair <- function(pmat1, pmat2, pop1, pop2, gen0) {
 #'   `CHROM` and `POS` output columns.
 #' @param alternative Character string, one of `"two.sided"` (default),
 #'   `"less"`, or `"greater"`: the alternative hypothesis of the t-test.
+#' @param increments Logical; if `TRUE`, return the long-format table of
+#'   standardized increments instead of the pooled summary.
 #'
-#' @return A data.frame with one row per variant and population, with columns
-#'   `population`, `CHROM`, `POS` (the latter two only if `snp_coords` is
-#'   supplied), `ybar` (mean standardized allele-frequency change),
-#'   `s2` (sample variance of the pooled changes), `n` (number of non-NA
-#'   changes pooled across time points and replicates), `df` (`n - 1`),
-#'   `tvalue`, and `pvalue`. Variants without usable changes in a population
-#'   get `NA` for the statistic columns.
+#' @return If `increments = FALSE` (default), a data.frame with one row per
+#'   variant and population, with columns `population`, `CHROM`, `POS` (the
+#'   latter two only if `snp_coords` is supplied), `ybar` (mean standardized
+#'   allele-frequency change), `s2` (sample variance of the pooled changes),
+#'   `n` (number of non-NA changes pooled across time points and replicates),
+#'   `df` (`n - 1`), `tvalue`, and `pvalue`. Variants without usable changes
+#'   in a population get `NA` for the statistic columns. If
+#'   `increments = TRUE`, a long-format data.frame with one row per
+#'   non-NA standardized increment: `population`, `replicate`, `pool`
+#'   (the `pop_time_rep` column name of the interval's end point in
+#'   `freq_mat`), `yi` (the standardized change), plus `CHROM` and `POS` if
+#'   `snp_coords` is supplied.
 #' @export
 #'
 #' @details
-#' The test pools across adjacent intervals and replicates, so `df` equals
-#' the total number of non-NA allele-frequency increments of the population
-#' (across all time points and replicates) minus 1. Groups with fewer than
-#' two usable changes have an undefined variance and yield `NA` statistics.
-#' Frequencies of exactly 0 or 1 make the standardization denominator zero;
-#' such boundary variants should be removed upstream with
-#' [filter_fixations()]. The function is pure: to process a large CSV in
-#' batches, first convert it to a parquet dataset with [csv_to_parquet()],
-#' then apply this function per batch and append the results.
+#' The increments are computed per replicate: within a replicate, each
+#' time point is differenced from the previous one (with the shared `p0`
+#' serving as the baseline of the first interval), so a replicate missing
+#' an intermediate time point contributes a longer-interval increment with
+#' the correspondingly larger `dt` instead of being dropped. The test then
+#' pools across adjacent intervals and replicates, so `df` equals the total
+#' number of non-NA allele-frequency increments of the population minus 1.
+#' Groups with fewer than two usable changes have an undefined variance and
+#' yield `NA` statistics. Frequencies of exactly 0 or 1 make the
+#' standardization denominator zero; such boundary variants should be
+#' removed upstream with [filter_fixations()]. The function is pure: to
+#' process a large CSV in batches, first convert it to a parquet dataset
+#' with [csv_to_parquet()], then apply this function per batch and append
+#' the results. The `increments = TRUE` long format matches the TSV layout
+#' of the upstream grenenet-phase2 processing script (columns `chrom`,
+#' `pos`, `site`, `rep`, `pool`, `yi` before summarizing).
 #'
 #' @examples
 #' set.seed(1)
@@ -1304,9 +1318,15 @@ covmat_pop_pair <- function(pmat1, pmat2, pop1, pop2, gen0) {
 #'                              meta$time_point, meta$replicate, sep = "_"))))
 #' p0 <- p0_vec(runif(L, 0.2, 0.8))
 #' feder_t_test(fm, p0, sample_info(meta))
+#' feder_t_test(fm, p0, sample_info(meta), increments = TRUE)
 feder_t_test <- function(freq_mat, p0, sample_meta, snp_coords = NULL,
-                         alternative = c("two.sided", "less", "greater")) {
+                         alternative = c("two.sided", "less", "greater"),
+                         increments = FALSE) {
   alternative <- match.arg(alternative)
+  if (!is.logical(increments) || length(increments) != 1 ||
+      is.na(increments)) {
+    stop("increments must be a single TRUE or FALSE.")
+  }
   if (!inherits(freq_mat, "freq_matrix")) {
     stop("freq_mat must be a freq_matrix object.")
   }
@@ -1343,50 +1363,53 @@ feder_t_test <- function(freq_mat, p0, sample_meta, snp_coords = NULL,
   fm <- unclass(freq_mat)
   meta <- sample_meta[, c("population", "time_point", "replicate",
                           "sample_size"), drop = FALSE]
-  times <- sort(unique(meta$time_point))
-  times <- times[times > 0]
-  if (length(times) < 1) {
+  if (!any(meta$time_point > 0)) {
     stop("sample_info has no positive time points: no intervals to test.")
   }
-  anchors <- c(0, times) # 0 = the shared p0 baseline
 
   out_rows <- list()
+  inc_rows <- list()
   row_i <- 0
+  inc_i <- 0
   for (pop in unique(meta$population)) {
     pop_meta <- meta[meta$population == pop, , drop = FALSE]
 
-    # Stack standardized changes: one matrix column per interval-replicate
+    # Stack standardized changes: one matrix column per replicate-interval
     y_pool <- matrix(numeric(0), nrow = L)
-    for (i in seq_along(anchors)[-1]) {
-      t_curr <- anchors[i]
-      t_prev <- anchors[i - 1]
-      dt <- t_curr - t_prev
-      meta_curr <- pop_meta[pop_meta$time_point == t_curr, , drop = FALSE]
-      if (nrow(meta_curr) == 0) next
-      curr_idx <- which(meta$population == pop & meta$time_point == t_curr)
-      if (t_prev == 0) {
-        # p0 baseline: pair every replicate at t_curr with the shared p0
-        prev_mat <- matrix(rep(unclass(p0), length(curr_idx)), nrow = L)
-        denom <- sqrt(2 * unclass(p0) * (1 - unclass(p0)) * dt)
-        y_new <- (fm[, curr_idx, drop = FALSE] - prev_mat) / denom
-      } else {
-        # only replicates sampled at both interval endpoints
-        meta_prev <- pop_meta[pop_meta$time_point == t_prev, , drop = FALSE]
-        reps <- intersect(meta_curr$replicate, meta_prev$replicate)
-        if (length(reps) == 0) next
-        prev_idx <- which(meta$population == pop & meta$time_point == t_prev &
-                          meta$replicate %in% reps)
-        # align replicate order between the two endpoint column sets
-        curr_idx <- curr_idx[match(reps, meta[curr_idx, "replicate"])]
-        prev_idx <- prev_idx[match(reps, meta[prev_idx, "replicate"])]
-        curr_idx <- curr_idx[match(reps, meta[curr_idx, "replicate"])]
-        prev_mat <- fm[, prev_idx, drop = FALSE]
-        denom <- sqrt(2 * prev_mat * (1 - prev_mat) * dt)
-        y_new <- (fm[, curr_idx, drop = FALSE] - prev_mat) / denom
-      }
+    y_labels <- character(0)
+    y_reps <- character(0)
+    for (rep in unique(pop_meta$replicate)) {
+      rep_rows <- which(meta$population == pop & meta$replicate == rep)
+      times <- meta$time_point[rep_rows]
+      keep <- times > 0
+      if (!any(keep)) next # replicate sampled only at t = 0
+      rep_rows <- rep_rows[keep]
+      times <- sort(times[keep])
+      ord <- match(times, meta$time_point[rep_rows])
+      rep_rows <- rep_rows[ord]
+      # prepend the shared p0 as the t = 0 baseline of the first interval
+      p_prev <- cbind(matrix(unclass(p0), nrow = L),
+                      fm[, rep_rows[-length(rep_rows)], drop = FALSE])
+      p_curr <- fm[, rep_rows, drop = FALSE]
+      dt <- diff(c(0, times))
+      y_new <- (p_curr - p_prev) /
+        sqrt(2 * p_prev * (1 - p_prev) * rep(dt, each = L))
       y_pool <- cbind(y_pool, y_new)
+      y_labels <- c(y_labels, paste(pop, times, rep, sep = "_"))
+      y_reps <- c(y_reps, rep(rep, length(times)))
     }
     if (ncol(y_pool) == 0) next
+
+    if (increments) {
+      inc_i <- inc_i + 1
+      inc_rows[[inc_i]] <- data.frame(
+        population = pop,
+        replicate = rep(y_reps, each = L),
+        pool = rep(y_labels, each = L),
+        yi = as.numeric(t(y_pool))
+      )
+      next
+    }
 
     ybar <- rowMeans(y_pool, na.rm = TRUE)
     s2 <- matrixStats_rowVars(y_pool)
@@ -1408,16 +1431,28 @@ feder_t_test <- function(freq_mat, p0, sample_meta, snp_coords = NULL,
     )
   }
   if (row_i == 0) {
-    stop("No population has a usable time interval: nothing to test.")
+    if (inc_i == 0) {
+      stop("No population has a usable time interval: nothing to test.")
+    }
+    out <- do.call(rbind.data.frame, inc_rows)
+  } else {
+    out <- do.call(rbind.data.frame, out_rows)
   }
-  out <- do.call(rbind.data.frame, out_rows)
   if (!is.null(snp_coords)) {
-    n_pops <- length(unique(out$population))
-    out$CHROM <- rep(snp_coords$CHROM, times = n_pops)
-    out$POS <- rep(snp_coords$POS, times = n_pops)
-    out <- out[, c("population", "CHROM", "POS",
-                   setdiff(names(out), c("population", "CHROM", "POS"))),
-               drop = FALSE]
+    if (increments) {
+      out$CHROM <- rep(snp_coords$CHROM, times = nrow(out) / L)
+      out$POS <- rep(snp_coords$POS, times = nrow(out) / L)
+      out <- out[, c("population", "CHROM", "POS",
+                     setdiff(names(out), c("population", "CHROM", "POS"))),
+                 drop = FALSE]
+    } else {
+      n_pops <- length(unique(out$population))
+      out$CHROM <- rep(snp_coords$CHROM, times = n_pops)
+      out$POS <- rep(snp_coords$POS, times = n_pops)
+      out <- out[, c("population", "CHROM", "POS",
+                     setdiff(names(out), c("population", "CHROM", "POS"))),
+                 drop = FALSE]
+    }
   }
   out
 }

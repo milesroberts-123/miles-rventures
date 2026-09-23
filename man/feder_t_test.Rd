@@ -9,7 +9,8 @@ feder_t_test(
   p0,
   sample_meta,
   snp_coords = NULL,
-  alternative = c("two.sided", "less", "greater")
+  alternative = c("two.sided", "less", "greater"),
+  increments = FALSE
 )
 }
 \arguments{
@@ -28,15 +29,23 @@ columns of \code{freq_mat} in order.}
 
 \item{alternative}{Character string, one of \code{"two.sided"} (default),
 \code{"less"}, or \code{"greater"}: the alternative hypothesis of the t-test.}
+
+\item{increments}{Logical; if \code{TRUE}, return the long-format table of
+standardized increments instead of the pooled summary.}
 }
 \value{
-A data.frame with one row per variant and population, with columns
-\code{population}, \code{CHROM}, \code{POS} (the latter two only if \code{snp_coords} is
-supplied), \code{ybar} (mean standardized allele-frequency change),
-\code{s2} (sample variance of the pooled changes), \code{n} (number of non-NA
-changes pooled across time points and replicates), \code{df} (\code{n - 1}),
-\code{tvalue}, and \code{pvalue}. Variants without usable changes in a population
-get \code{NA} for the statistic columns.
+If \code{increments = FALSE} (default), a data.frame with one row per
+variant and population, with columns \code{population}, \code{CHROM}, \code{POS} (the
+latter two only if \code{snp_coords} is supplied), \code{ybar} (mean standardized
+allele-frequency change), \code{s2} (sample variance of the pooled changes),
+\code{n} (number of non-NA changes pooled across time points and replicates),
+\code{df} (\code{n - 1}), \code{tvalue}, and \code{pvalue}. Variants without usable changes
+in a population get \code{NA} for the statistic columns. If
+\code{increments = TRUE}, a long-format data.frame with one row per
+non-NA standardized increment: \code{population}, \code{replicate}, \code{pool}
+(the \code{pop_time_rep} column name of the interval's end point in
+\code{freq_mat}), \code{yi} (the standardized change), plus \code{CHROM} and \code{POS} if
+\code{snp_coords} is supplied.
 }
 \description{
 For each population, computes standardized allele-frequency changes
@@ -48,15 +57,22 @@ style t-test of temporal allele-frequency change).
 }
 }
 \details{
-The test pools across adjacent intervals and replicates, so \code{df} equals
-the total number of non-NA allele-frequency increments of the population
-(across all time points and replicates) minus 1. Groups with fewer than
-two usable changes have an undefined variance and yield \code{NA} statistics.
-Frequencies of exactly 0 or 1 make the standardization denominator zero;
-such boundary variants should be removed upstream with
-\code{\link[=filter_fixations]{filter_fixations()}}. The function is pure: to process a large CSV in
-batches, first convert it to a parquet dataset with \code{\link[=csv_to_parquet]{csv_to_parquet()}},
-then apply this function per batch and append the results.
+The increments are computed per replicate: within a replicate, each
+time point is differenced from the previous one (with the shared \code{p0}
+serving as the baseline of the first interval), so a replicate missing
+an intermediate time point contributes a longer-interval increment with
+the correspondingly larger \code{dt} instead of being dropped. The test then
+pools across adjacent intervals and replicates, so \code{df} equals the total
+number of non-NA allele-frequency increments of the population minus 1.
+Groups with fewer than two usable changes have an undefined variance and
+yield \code{NA} statistics. Frequencies of exactly 0 or 1 make the
+standardization denominator zero; such boundary variants should be
+removed upstream with \code{\link[=filter_fixations]{filter_fixations()}}. The function is pure: to
+process a large CSV in batches, first convert it to a parquet dataset
+with \code{\link[=csv_to_parquet]{csv_to_parquet()}}, then apply this function per batch and append
+the results. The \code{increments = TRUE} long format matches the TSV layout
+of the upstream grenenet-phase2 processing script (columns \code{chrom},
+\code{pos}, \code{site}, \code{rep}, \code{pool}, \code{yi} before summarizing).
 }
 \examples{
 set.seed(1)
@@ -72,4 +88,5 @@ fm <- freq_matrix(matrix(runif(L * nrow(meta)), nrow = L,
                              meta$time_point, meta$replicate, sep = "_"))))
 p0 <- p0_vec(runif(L, 0.2, 0.8))
 feder_t_test(fm, p0, sample_info(meta))
+feder_t_test(fm, p0, sample_info(meta), increments = TRUE)
 }
