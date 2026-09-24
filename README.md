@@ -5,6 +5,7 @@ An R package of convenience functions for use across RStudio projects.
 ## Contents
 
 - [Installation](#installation)
+- [Updating](#updating)
 - [Usage](#usage)
 - [Functions](#functions)
   - [Plotting](#plotting)
@@ -28,6 +29,37 @@ Or from a local clone:
 
 ```r
 devtools::install()
+```
+
+## Updating
+
+R keeps a package loaded until the session ends, so reinstalling alone is
+not enough — restart the R session (Session > Restart R in RStudio) after
+updating.
+
+From GitHub (the same command as installation; it always fetches the
+latest commit on `main`):
+
+```r
+devtools::install_github("milesroberts-123/miles-rventures")
+```
+
+From a local clone: pull, then reinstall.
+
+```
+# in a terminal, inside the repo
+git pull
+```
+
+```r
+# then in R
+devtools::install()
+```
+
+Check which version is loaded:
+
+```r
+packageVersion("rventures")
 ```
 
 ## Usage
@@ -125,3 +157,6 @@ After editing `R/` files, regenerate docs and NAMESPACE:
 ```r
 devtools::document()
 ```
+
+While iterating on the package itself, `pkgload::load_all()` makes the
+local clone's functions available without reinstalling the package.
