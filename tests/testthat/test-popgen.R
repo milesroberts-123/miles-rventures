@@ -790,6 +790,43 @@ test_that("g_prime matches manual computation", {
   expect_error(g_prime(times = 2:3, pmat = pmat, N = 1, n = n), "N > 2")
 })
 
+test_that("covmat_from_pmat coerces tibbles and data frames to matrices", {
+  set.seed(1)
+  pmat_m <- matrix(runif(15), nrow = 5, ncol = 3)
+  pmat_tb <- tibble::as_tibble(pmat_m, .name_repair = "minimal")
+  n <- c(50, 50, 50)
+  expect_no_warning(cm_m <- covmat_from_pmat(pmat_m, n = n,
+                                             correct_for_n = TRUE))
+  expect_no_warning(cm_tb <- covmat_from_pmat(pmat_tb, n = n,
+                                              correct_for_n = TRUE))
+  expect_equal(unname(cm_tb), unname(cm_m))
+  expect_false(anyNA(cm_tb))
+  # window procedure with tibble input: the reported corruption scenario
+  windows <- rep(1:2, times = c(3, 2))
+  set.seed(2)
+  cm_w_m <- covmat_from_pmat(pmat_m, n = n, correct_for_n = TRUE,
+                             procedure = "window", windows = windows)
+  set.seed(2)
+  expect_no_warning(cm_w_tb <- covmat_from_pmat(pmat_tb, n = n,
+                                                correct_for_n = TRUE,
+                                                procedure = "window",
+                                                windows = windows))
+  expect_false(anyNA(cm_w_tb))
+  expect_false(all(diag(cm_w_tb) == 0))
+})
+
+test_that("g_prime accepts tibbles like matrices", {
+  set.seed(1)
+  pmat_m <- matrix(runif(15), nrow = 5, ncol = 3)
+  pmat_tb <- tibble::as_tibble(pmat_m, .name_repair = "minimal")
+  n <- c(50, 50, 50)
+  expect_no_warning(g_m <- g_prime(times = 2:3, pmat = pmat_m, N = 100, n = n))
+  expect_no_warning(g_tb <- g_prime(times = 2:3, pmat = pmat_tb, N = 100,
+                                    n = n))
+  expect_equal(unname(g_tb), unname(g_m))
+  expect_false(anyNA(g_tb))
+})
+
 test_that("covmat_pop_pair computes mean standardized between-pop covariance", {
   set.seed(1)
   L <- 10

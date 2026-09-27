@@ -837,7 +837,8 @@ standard_cov_by_het <- function(pmat, covmat) {
 #' input, and sign randomization for null comparisons.
 #'
 #' @param pmat Numeric matrix of allele frequencies; the first column is the
-#'   initial generation and time points ascend left to right.
+#'   initial generation and time points ascend left to right. Data frames and
+#'   tibbles are coerced to matrices.
 #' @param n Optional numeric vector of sample sizes (number of chromosomes,
 #'   i.e. gene copies, sampled per time point); required if
 #'   `correct_for_n = TRUE`. Must have one entry per time point (i.e.,
@@ -867,6 +868,7 @@ standard_cov_by_het <- function(pmat, covmat) {
 covmat_from_pmat <- function(pmat, n = NULL, correct_for_n = TRUE,
                              standard_by_het = FALSE, input_asin_trans = FALSE,
                              procedure = "none", windows = NULL) {
+  pmat <- as.matrix(pmat)
   # allele frequency changes between adjacent generations
   pdiff <- freq_increments(pmat)
   # randomly swap signs of allele frequency changes
@@ -875,6 +877,7 @@ covmat_from_pmat <- function(pmat, n = NULL, correct_for_n = TRUE,
   if (is.null(dim(pdiff))) {
     pdiff <- matrix(pdiff, ncol = 1)
   }
+  pdiff <- as.matrix(pdiff)
   # covariance matrices
   covmat <- stats::cov(pdiff, use = "pairwise.complete.obs")
   # correct for sample size, if needed
@@ -976,7 +979,7 @@ rolling_matrix_sum <- function(mat) {
 #'   (length `ncol(pmat) - 1`), used to order the rolling sums.
 #' @param pmat Numeric matrix of allele frequencies, rows = variants,
 #'   columns = time points ascending; the first column is the initial
-#'   generation.
+#'   generation. Data frames and tibbles are coerced to matrices.
 #' @param N Effective population size (number of diploid individuals).
 #' @param n Numeric vector of sample sizes (chromosomes) per time point,
 #'   passed to [covmat_from_pmat()] for the sample size correction.
@@ -993,6 +996,7 @@ rolling_matrix_sum <- function(mat) {
 #' g_prime(times = 2:3, pmat = pmat, N = 100, n = c(50, 50, 50))
 g_prime <- function(times, pmat, N, n, take_abs = FALSE) {
   stopifnot(all(times >= 0), N > 2)
+  pmat <- as.matrix(pmat)
   covmat <- covmat_from_pmat(pmat, n)
   ep0 <- mean(pmat[, 1] * (1 - pmat[, 1]), na.rm = TRUE)
   if (take_abs) {

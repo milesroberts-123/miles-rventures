@@ -13,7 +13,7 @@ g_prime(times, pmat, N, n, take_abs = FALSE)
 
 \item{pmat}{Numeric matrix of allele frequencies, rows = variants,
 columns = time points ascending; the first column is the initial
-generation.}
+generation. Data frames and tibbles are coerced to matrices.}
 
 \item{N}{Effective population size (number of diploid individuals).}
 

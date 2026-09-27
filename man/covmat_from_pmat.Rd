@@ -16,7 +16,8 @@ covmat_from_pmat(
 }
 \arguments{
 \item{pmat}{Numeric matrix of allele frequencies; the first column is the
-initial generation and time points ascend left to right.}
+initial generation and time points ascend left to right. Data frames and
+tibbles are coerced to matrices.}
 
 \item{n}{Optional numeric vector of sample sizes (number of chromosomes,
 i.e. gene copies, sampled per time point); required if
