@@ -24,7 +24,9 @@ i.e. gene copies, sampled per time point); required if
 \code{correct_for_n = TRUE}. Must have one entry per time point (i.e.,
 \code{ncol(pmat)}), and all entries must be at least 2: the raw-frequency
 correction divides by \code{n - 1}. Note \code{n} counts chromosomes, not diploid
-individuals.}
+individuals. Also passed to \code{\link[=standard_cov_by_het]{standard_cov_by_het()}} when
+\code{standard_by_het = TRUE} (the first \code{ncol(pmat) - 1} entries, one per
+interval), enabling its \code{n / (n - 1)} bias correction there.}
 
 \item{correct_for_n}{Boolean; whether to correct covariances and variances
 for finite sample size.}

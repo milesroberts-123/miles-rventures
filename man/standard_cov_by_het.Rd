@@ -4,7 +4,7 @@
 \alias{standard_cov_by_het}
 \title{Standardize covariance matrix by heterozygosity}
 \usage{
-standard_cov_by_het(pmat, covmat)
+standard_cov_by_het(pmat, covmat, n = NULL)
 }
 \arguments{
 \item{pmat}{Numeric matrix of allele frequencies excluding the last time
@@ -13,6 +13,11 @@ that interval.}
 
 \item{covmat}{Square covariance matrix of allele frequency changes, with
 one row/column per interval.}
+
+\item{n}{Optional numeric vector of sample sizes (number of chromosomes,
+i.e. gene copies), one per column of \code{pmat}: column \code{j} pairs with
+\code{n[j]}, the sample size at the start of interval \code{j}. All entries must
+be at least 2. Enables the \code{n / (n - 1)} bias correction.}
 }
 \value{
 The standardized covariance matrix.
@@ -22,10 +27,13 @@ Divides each variance and covariance of a temporal covariance matrix by
 the summed heterozygosity of the corresponding interval, so that entries
 are comparable across intervals with different amounts of standing
 variation. Covariances are divided by \code{half_het_sums[min(i, j)]}, the
-heterozygosity of the earlier of the two intervals.
+heterozygosity of the earlier of the two intervals. If \code{n} is supplied,
+the heterozygosity terms are multiplied by \code{n / (n - 1)} to correct for
+the downward bias of sample heterozygosity.
 }
 \examples{
 pmat <- matrix(c(0.5, 0.2, 0.5, 0.2), nrow = 2)
 covmat <- cov(t(pmat))
 standard_cov_by_het(pmat, covmat)
+standard_cov_by_het(pmat, covmat, n = c(50, 50))
 }

@@ -733,6 +733,54 @@ test_that("standard_cov_by_het divides by half heterozygosity sums", {
   expect_equal(out[2, 1], 1 / h1)
 })
 
+test_that("standard_cov_by_het multiplies het sums by n/(n-1) with n", {
+  pmat <- matrix(c(0.5, 0.2, 0.6, 0.3), nrow = 2)
+  covmat <- matrix(c(4, 1, 1, 9), nrow = 2)
+  n <- c(10, 20)
+  out <- standard_cov_by_het(pmat, covmat, n = n)
+  h1 <- 0.5 * sum_of_het(pmat[, 1]) * n[1] / (n[1] - 1)
+  h2 <- 0.5 * sum_of_het(pmat[, 2]) * n[2] / (n[2] - 1)
+  expect_equal(out[1, 1], 4 / h1)
+  expect_equal(out[2, 2], 9 / h2)
+  expect_equal(out[1, 2], 1 / h1) # min(1,2) = 1: earlier interval's factor
+  expect_equal(out[2, 1], 1 / h1)
+})
+
+test_that("standard_cov_by_het validates n", {
+  pmat <- matrix(c(0.5, 0.2, 0.6, 0.3), nrow = 2)
+  covmat <- matrix(c(4, 1, 1, 9), nrow = 2)
+  expect_error(standard_cov_by_het(pmat, covmat, n = c(10, 10, 10)),
+               "sample size for every time point")
+  expect_error(standard_cov_by_het(pmat, covmat, n = c(10, 1)),
+               "All n must be >= 2")
+})
+
+test_that("covmat_from_pmat passes n to het standardization", {
+  set.seed(1)
+  pmat <- matrix(runif(15), nrow = 5, ncol = 3)
+  n <- c(50, 50, 50)
+  # with sample-size correction
+  expect_equal(
+    unname(covmat_from_pmat(pmat, n = n, correct_for_n = TRUE,
+                            standard_by_het = TRUE)),
+    unname(standard_cov_by_het(
+      pmat[, -ncol(pmat), drop = FALSE],
+      correct_covmat_for_n(pmat, stats::cov(freq_increments(pmat)), n),
+      n = n[-length(n)]
+    ))
+  )
+  # without sample-size correction, n still feeds the het factor
+  expect_equal(
+    unname(covmat_from_pmat(pmat, n = n, correct_for_n = FALSE,
+                            standard_by_het = TRUE)),
+    unname(standard_cov_by_het(
+      pmat[, -ncol(pmat), drop = FALSE],
+      stats::cov(freq_increments(pmat)),
+      n = n[-length(n)]
+    ))
+  )
+})
+
 test_that("rolling_matrix_sum sums successively larger top-left sub-squares", {
   set.seed(456)
   mat <- matrix(runif(10 * 10, min = -1, max = 1), nrow = 10, ncol = 10)

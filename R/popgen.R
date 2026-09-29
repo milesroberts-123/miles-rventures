@@ -805,13 +805,19 @@ sign_permute_increments <- function(pdiff, procedure = "none", windows = NULL) {
 #' the summed heterozygosity of the corresponding interval, so that entries
 #' are comparable across intervals with different amounts of standing
 #' variation. Covariances are divided by `half_het_sums[min(i, j)]`, the
-#' heterozygosity of the earlier of the two intervals.
+#' heterozygosity of the earlier of the two intervals. If `n` is supplied,
+#' the heterozygosity terms are multiplied by `n / (n - 1)` to correct for
+#' the downward bias of sample heterozygosity.
 #'
 #' @param pmat Numeric matrix of allele frequencies excluding the last time
 #'   point: one column per interval, holding the frequencies at the start of
 #'   that interval.
 #' @param covmat Square covariance matrix of allele frequency changes, with
 #'   one row/column per interval.
+#' @param n Optional numeric vector of sample sizes (number of chromosomes,
+#'   i.e. gene copies), one per column of `pmat`: column `j` pairs with
+#'   `n[j]`, the sample size at the start of interval `j`. All entries must
+#'   be at least 2. Enables the `n / (n - 1)` bias correction.
 #'
 #' @return The standardized covariance matrix.
 #' @export
@@ -820,10 +826,20 @@ sign_permute_increments <- function(pdiff, procedure = "none", windows = NULL) {
 #' pmat <- matrix(c(0.5, 0.2, 0.5, 0.2), nrow = 2)
 #' covmat <- cov(t(pmat))
 #' standard_cov_by_het(pmat, covmat)
-standard_cov_by_het <- function(pmat, covmat) {
+#' standard_cov_by_het(pmat, covmat, n = c(50, 50))
+standard_cov_by_het <- function(pmat, covmat, n = NULL) {
   stopifnot(ncol(pmat) == ncol(covmat))
   half_het_sums <- 0.5 * apply(pmat, MARGIN = 2, FUN = sum_of_het)
   stopifnot(all(half_het_sums > 0))
+  if (!is.null(n)) {
+    if (any(n < 2)) {
+      stop("All n must be >= 2")
+    }
+    if (length(n) != ncol(pmat)) {
+      stop("Should be a sample size for every time point.")
+    }
+    half_het_sums <- half_het_sums * n / (n - 1)
+  }
   # each variance (i, i) and covariance (i, j) is divided by the
   # heterozygosity of the earlier of the two intervals
   covmat / half_het_sums[pmin(row(covmat), col(covmat))]
@@ -929,7 +945,9 @@ correct_covmat_for_n <- function(pmat, covmat, n, input_asin_trans = FALSE) {
 #'   `correct_for_n = TRUE`. Must have one entry per time point (i.e.,
 #'   `ncol(pmat)`), and all entries must be at least 2: the raw-frequency
 #'   correction divides by `n - 1`. Note `n` counts chromosomes, not diploid
-#'   individuals.
+#'   individuals. Also passed to [standard_cov_by_het()] when
+#'   `standard_by_het = TRUE` (the first `ncol(pmat) - 1` entries, one per
+#'   interval), enabling its `n / (n - 1)` bias correction there.
 #' @param correct_for_n Boolean; whether to correct covariances and variances
 #'   for finite sample size.
 #' @param standard_by_het Boolean; whether to standardize the covariance
@@ -976,7 +994,9 @@ covmat_from_pmat <- function(pmat, n = NULL, correct_for_n = TRUE,
   }
 
   if (standard_by_het) {
-    covmat <- standard_cov_by_het(pmat[, -ncol(pmat), drop = FALSE], covmat)
+    n_het <- if (is.null(n)) NULL else n[-length(n)]
+    covmat <- standard_cov_by_het(pmat[, -ncol(pmat), drop = FALSE], covmat,
+                                  n = n_het)
   }
 
   return(covmat)
