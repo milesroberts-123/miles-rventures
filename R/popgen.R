@@ -692,7 +692,7 @@ geom_pairwise_mean <- function(my_vector) {
 #' pmat <- matrix(c(0.1, 0.2, 0.3, 0.4, 0.2, 0.3, 0.4, 0.5), nrow = 2, byrow = TRUE)
 #' freq_increments(pmat)
 freq_increments <- function(pmat) {
-  pmat[, -1] - pmat[, -ncol(pmat)]
+  pmat[, -1, drop = FALSE] - pmat[, -ncol(pmat), drop = FALSE]
 }
 
 #' Mark entries after first NA as also NA
@@ -829,6 +829,91 @@ standard_cov_by_het <- function(pmat, covmat) {
   covmat / half_het_sums[pmin(row(covmat), col(covmat))]
 }
 
+#' Correct a covariance matrix of allele frequency changes for sample size
+#'
+#' Applies the finite sample-size correction to a precomputed covariance
+#' matrix of allele frequency changes. Adjacent-interval covariances and all
+#' variances are adjusted using the allele frequencies at interval endpoints;
+#' entries between non-adjacent intervals are left unchanged. Formulas differ
+#' between raw and arcsine-square-root transformed input.
+#'
+#' @param pmat Numeric matrix of allele frequencies, rows = variants,
+#'   columns = time points ascending; the first column is the initial
+#'   generation. Data frames and tibbles are coerced to matrices.
+#' @param covmat Square covariance matrix of allele frequency changes, with
+#'   one row/column per interval (`ncol(pmat) - 1`).
+#' @param n Numeric vector of sample sizes (number of chromosomes, i.e. gene
+#'   copies, sampled per time point). Must have one entry per time point
+#'   (i.e., `ncol(pmat)`), and all entries must be at least 2: the
+#'   raw-frequency correction divides by `n - 1`. Note `n` counts
+#'   chromosomes, not diploid individuals.
+#' @param input_asin_trans Boolean; whether `pmat` holds arcsine-square-root
+#'   transformed frequencies (changes the sample size correction formulas).
+#'
+#' @return The sample-size-corrected covariance matrix of allele frequency
+#'   changes.
+#' @export
+#'
+#' @examples
+#' set.seed(1)
+#' pmat <- matrix(runif(15), nrow = 5, ncol = 3)
+#' covmat <- stats::cov(freq_increments(pmat))
+#' correct_covmat_for_n(pmat, covmat, n = c(50, 50, 50))
+correct_covmat_for_n <- function(pmat, covmat, n, input_asin_trans = FALSE) {
+  pmat <- as.matrix(pmat)
+  stopifnot(ncol(pmat) - 1 == ncol(covmat))
+  if (any(n < 2)) {
+    stop("All n must be >= 2")
+  }
+  if (length(n) != (ncol(covmat) + 1)) {
+    stop("Should be a sample size for every time point.")
+  }
+  ### ARCSIN-SQRT TRANSFORMED FREQUENCIES ###
+  if (input_asin_trans) {
+    # correct overlapping covariances
+    # seq_len() yields integer(0) when ncol(covmat) == 1, so this is skipped
+    for (i in seq_len(ncol(covmat) - 1)) {
+      corrected_cov <- covmat[i, i + 1] + (1 / n[i + 1])
+      covmat[i, i + 1] <- corrected_cov
+      covmat[i + 1, i] <- corrected_cov
+    }
+    # correct variances
+    for (i in seq_len(ncol(covmat))) {
+      corrected_var <- covmat[i, i] - (1 / n[i]) - (1 / n[i + 1])
+      if (corrected_var < 0) {
+        warning("Sample size correction makes variance negative. Setting variance to zero")
+        covmat[i, i] <- 0
+      } else {
+        covmat[i, i] <- corrected_var
+      }
+    }
+    ### RAW FREQUENCIES ###
+  } else {
+    pdiff <- freq_increments(pmat)
+    # correct overlapping covariances
+    # seq_len() yields integer(0) when ncol(covmat) == 1, so this is skipped
+    for (i in seq_len(ncol(covmat) - 1)) {
+      corrected_cov <- mean(pdiff[, i] * pdiff[, i + 1], na.rm = TRUE) +
+        mean(pmat[, i + 1] * (1 - pmat[, i + 1]) / (n[i + 1] - 1), na.rm = TRUE)
+      covmat[i, i + 1] <- corrected_cov
+      covmat[i + 1, i] <- corrected_cov
+    }
+    # correct variances
+    for (i in seq_len(ncol(covmat))) {
+      corrected_var <- mean((pdiff[, i])^2, na.rm = TRUE) -
+        mean(pmat[, i] * (1 - pmat[, i]) / (n[i] - 1), na.rm = TRUE) -
+        mean(pmat[, i + 1] * (1 - pmat[, i + 1]) / (n[i + 1] - 1), na.rm = TRUE)
+      if (corrected_var < 0 | is.na(corrected_var)) {
+        warning("Sample size correction makes variance negative. Setting variance to zero")
+        covmat[i, i] <- 0
+      } else {
+        covmat[i, i] <- corrected_var
+      }
+    }
+  }
+  covmat
+}
+
 #' Calculate covariances from allele frequency matrix
 #'
 #' Computes the covariance matrix of allele frequency changes between
@@ -882,58 +967,12 @@ covmat_from_pmat <- function(pmat, n = NULL, correct_for_n = TRUE,
   covmat <- stats::cov(pdiff, use = "pairwise.complete.obs")
   # correct for sample size, if needed
   if (correct_for_n) {
-    if (any(n < 2)) {
-      stop("All n must be >= 2")
+    # check transformed data are actually input
+    if (input_asin_trans && all(pmat[, 1] < pi)) {
+      warning("Are you sure values are arcsin transformed?")
     }
-    if (length(n) != (ncol(covmat) + 1)) {
-      stop("Should be a sample size for every time point.")
-    }
-    ### ARCSIN-SQRT TRANSFORMED FREQUENCIES ###
-    if (input_asin_trans) {
-      # check transformed data are actually input
-      if (all(pmat[, 1] < pi)) {
-        warning("Are you sure values are arcsin transformed?")
-      }
-      # correct overlapping covariances
-      # seq_len() yields integer(0) when ncol(covmat) == 1, so this is skipped
-      for (i in seq_len(ncol(covmat) - 1)) {
-        corrected_cov <- covmat[i, i + 1] + (1 / n[i + 1])
-        covmat[i, i + 1] <- corrected_cov
-        covmat[i + 1, i] <- corrected_cov
-      }
-      # correct variances
-      for (i in seq_len(ncol(covmat))) {
-        corrected_var <- covmat[i, i] - (1 / n[i]) - (1 / n[i + 1])
-        if (corrected_var < 0) {
-          warning("Sample size correction makes variance negative. Setting variance to zero")
-          covmat[i, i] <- 0
-        } else {
-          covmat[i, i] <- corrected_var
-        }
-      }
-      ### RAW FREQUENCIES ###
-    } else {
-      # correct overlapping covariances
-      # seq_len() yields integer(0) when ncol(covmat) == 1, so this is skipped
-      for (i in seq_len(ncol(covmat) - 1)) {
-        corrected_cov <- mean(pdiff[, i] * pdiff[, i + 1], na.rm = TRUE) +
-          mean(pmat[, i + 1] * (1 - pmat[, i + 1]) / (n[i + 1] - 1), na.rm = TRUE)
-        covmat[i, i + 1] <- corrected_cov
-        covmat[i + 1, i] <- corrected_cov
-      }
-      # correct variances
-      for (i in seq_len(ncol(covmat))) {
-        corrected_var <- mean((pdiff[, i])^2, na.rm = TRUE) -
-          mean(pmat[, i] * (1 - pmat[, i]) / (n[i] - 1), na.rm = TRUE) -
-          mean(pmat[, i + 1] * (1 - pmat[, i + 1]) / (n[i + 1] - 1), na.rm = TRUE)
-        if (corrected_var < 0 | is.na(corrected_var)) {
-          warning("Sample size correction makes variance negative. Setting variance to zero")
-          covmat[i, i] <- 0
-        } else {
-          covmat[i, i] <- corrected_var
-        }
-      }
-    }
+    covmat <- correct_covmat_for_n(pmat, covmat, n,
+                                   input_asin_trans = input_asin_trans)
   }
 
   if (standard_by_het) {

@@ -661,6 +661,58 @@ test_that("covmat_from_pmat validates sample sizes", {
   expect_error(covmat_from_pmat(pmat, n = c(10, 10, 10)), "sample size for every time point")
 })
 
+test_that("correct_covmat_for_n matches covmat_from_pmat on raw frequencies", {
+  set.seed(1)
+  pmat <- matrix(runif(15), nrow = 5, ncol = 3)
+  n <- c(50, 50, 50)
+  covmat <- stats::cov(freq_increments(pmat))
+  expect_equal(
+    unname(correct_covmat_for_n(pmat, covmat, n)),
+    unname(covmat_from_pmat(pmat, n = n))
+  )
+})
+
+test_that("correct_covmat_for_n matches covmat_from_pmat on asin input", {
+  set.seed(1)
+  pmat <- matrix(runif(15, 0, 1.5), nrow = 5, ncol = 3)
+  n <- c(50, 50, 50)
+  covmat <- stats::cov(freq_increments(pmat))
+  expect_equal(
+    unname(suppressWarnings(correct_covmat_for_n(pmat, covmat, n,
+                                                 input_asin_trans = TRUE))),
+    unname(suppressWarnings(
+      covmat_from_pmat(pmat, n = n, input_asin_trans = TRUE)
+    ))
+  )
+  # hand computation: adjacent +1/n, diagonal -1/n[i] - 1/n[i+1]
+  manual <- covmat
+  manual[1, 2] <- manual[2, 1] <- covmat[1, 2] + 1 / n[2]
+  manual[1, 1] <- covmat[1, 1] - 1 / n[1] - 1 / n[2]
+  manual[2, 2] <- covmat[2, 2] - 1 / n[2] - 1 / n[3]
+  expect_equal(unname(correct_covmat_for_n(pmat, covmat, n,
+                                           input_asin_trans = TRUE)),
+               unname(manual))
+})
+
+test_that("correct_covmat_for_n warns and zeroes negative variances", {
+  pmat <- matrix(c(0.3, 0.4, 0.3, 0.4), nrow = 2)
+  covmat <- stats::cov(pmat[, -1, drop = FALSE] - pmat[, 1, drop = FALSE])
+  expect_warning(
+    cm <- correct_covmat_for_n(pmat, covmat, n = c(5, 5)),
+    "variance negative"
+  )
+  expect_equal(cm[1, 1], 0)
+})
+
+test_that("correct_covmat_for_n validates covmat dims and sample sizes", {
+  pmat <- matrix(c(0.2, 0.4, 0.3, 0.5), nrow = 2)
+  covmat <- stats::cov(pmat[, -1, drop = FALSE] - pmat[, 1, drop = FALSE])
+  expect_error(correct_covmat_for_n(pmat, covmat, n = c(1, 1)),
+               "All n must be >= 2")
+  expect_error(correct_covmat_for_n(pmat, covmat, n = c(10, 10, 10)),
+               "sample size for every time point")
+})
+
 test_that("covmat_from_pmat works with a single interval (2 time points)", {
   pmat <- matrix(c(0.2, 0.4, 0.3, 0.5), nrow = 2)
   cm <- covmat_from_pmat(pmat, correct_for_n = FALSE)
