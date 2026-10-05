@@ -135,6 +135,7 @@ library(rventures)
 - `tau()` — cell-type specificity index of an expression vector (0 = ubiquitous, 1 = single sample), with NA-handling modes
 - `mean_no_zeros()` — mean expression conditioned on expression above a threshold
 - `create_prob()` — rescale an expression vector to fractions of its total (`x/sum(x)`), with NA handling and a zero-total guard
+- `entropy()` — Shannon entropy of a probability vector (bits by default), with optional normalization and NA handling; pairs with `create_prob()` as a specificity measure
 
 ### File management
 

@@ -201,3 +201,85 @@ test_that("expression module integrates: per-sample create_prob over a GxS matri
   expect_equal(vapply(probs[ok_cols], sum, numeric(1)), rep(1, S - 1))
   expect_identical(probs[[4]], NA_real_)
 })
+
+test_that("entropy matches hand-computed Shannon entropy", {
+  # concentrated: 0 bits regardless of base
+  expect_equal(entropy(create_prob(c(1, 0, 0))), 0)
+  expect_equal(entropy(create_prob(c(1, 0, 0)), log_base = exp(1)), 0)
+  # two samples (4, 1): p = (0.8, 0.2); H = -(0.8 lb 0.8 + 0.2 lb 0.2)
+  h_bits <- -(0.8 * log(0.8, 2) + 0.2 * log(0.2, 2))
+  expect_equal(entropy(create_prob(c(4, 1))), h_bits)
+  expect_equal(entropy(c(0.8, 0.2)), h_bits) # probabilities direct
+  # nats: same p, natural log
+  h_nats <- -(0.8 * log(0.8) + 0.2 * log(0.2))
+  expect_equal(entropy(c(0.8, 0.2), log_base = exp(1)), h_nats)
+  # uniform: maximum
+  expect_equal(entropy(c(0.25, 0.25, 0.25, 0.25)), 2) # bits, 4 entries
+  expect_equal(entropy(rep(1/5, 5)), log(5, 2))
+})
+
+test_that("entropy treats zero entries as zero contribution", {
+  # 0 log 0 = 0: no NaN, no warning
+  expect_no_warning(h <- entropy(c(0.5, 0.5, 0)))
+  expect_equal(h, 1)
+  # a vector that is one 1 and all zeros degenerates to H = 0
+  expect_equal(entropy(c(1, 0, 0, 0, 0)), 0)
+  # sum < 1 is allowed (no renormalization): p = (0.1, 0.1)
+  expect_equal(entropy(c(0.1, 0.1)), 2 * -(0.1 * log(0.1, 2)))
+})
+
+test_that("entropy normalized lies in [0, 1]", {
+  expect_equal(entropy(c(0.25, 0.25, 0.25, 0.25), normalized = TRUE), 1)
+  expect_equal(entropy(c(1, 0, 0), normalized = TRUE), 0)
+  # nats base: uniform max is ln(3)
+  expect_equal(entropy(rep(1/3, 3), log_base = exp(1), normalized = TRUE), 1)
+  # intermediate value hand-check: p = (0.8, 0.2), max = 1 bit
+  expect_equal(entropy(c(0.8, 0.2), normalized = TRUE),
+               -(0.8 * log(0.8, 2) + 0.2 * log(0.2, 2)))
+  # fewer than two entries: NA
+  expect_identical(entropy(1, normalized = TRUE), NA_real_)
+})
+
+test_that("entropy handles NA values by na_rm", {
+  # default: propagate
+  expect_identical(entropy(c(0.8, NA, 0.2)), NA_real_)
+  expect_no_warning(entropy(c(0.8, NA, 0.2)))
+  # na_rm: compute on observed values
+  expect_equal(entropy(c(0.8, NA, 0.2), na_rm = TRUE),
+               entropy(c(0.8, 0.2)))
+  # all-NA
+  expect_identical(entropy(c(NA, NA), na_rm = TRUE), NA_real_)
+  expect_identical(entropy(c(NA, NA)), NA_real_)
+})
+
+test_that("entropy validates input", {
+  expect_error(entropy(matrix(1:4, nrow = 2)), "p must be a numeric vector.")
+  expect_error(entropy(c("a", "b")), "p must be a numeric vector.")
+  expect_error(entropy(c(0.5, -0.1)), "probabilities between 0 and 1")
+  expect_error(entropy(c(0.5, 1.2)), "probabilities between 0 and 1")
+  expect_error(entropy(c(0.5, 0.5), log_base = 1), "log_base")
+  expect_error(entropy(c(0.5, 0.5), log_base = -2), "log_base")
+  expect_error(entropy(c(0.5, 0.5), log_base = c(2, 2)), "log_base")
+  expect_error(entropy(c(0.5, 0.5), normalized = "yes"), "normalized")
+})
+
+test_that("expression module integrates: entropy specificity over a GxS matrix", {
+  set.seed(21)
+  G <- 5
+  S <- 6
+  m <- matrix(runif(G * S, 0, 10), nrow = G, ncol = S)
+  m[1, ] <- 7 # ubiquitous gene
+  m[2, ] <- c(10, rep(0, S - 1)) # single-sample gene
+  em <- expr_matrix(m)
+  # per-gene sample shares, then entropy
+  h_bits <- apply(unclass(em), 1, function(col) entropy(create_prob(col)))
+  expect_equal(length(h_bits), G)
+  # ubiquitous: log2(S) bits, normalized to 1
+  expect_equal(h_bits[1], log(S, 2))
+  expect_equal(entropy(create_prob(unclass(em)[1, ]), normalized = TRUE), 1)
+  # single sample: 0
+  expect_equal(h_bits[2], 0)
+  # per-gene share vectors sum to 1
+  shares <- apply(unclass(em), 1, create_prob)
+  expect_equal(colSums(shares), rep(1, G))
+})

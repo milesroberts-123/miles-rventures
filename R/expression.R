@@ -197,3 +197,65 @@ create_prob <- function(x, na_rm = FALSE) {
   }
   x / total
 }
+
+#' Shannon entropy of a probability vector
+#'
+#' Computes the Shannon entropy `H = -sum(p * log(p))` of a vector of
+#' probabilities, with the `0 * log(0) = 0` convention for zero entries.
+#' Useful as a diversity/specificity measure for the sample- or gene-share
+#' vectors produced by [create_prob()]: `H` is 0 when mass is concentrated
+#' in one entry and `log(length(p))` (in the chosen base) when it is spread
+#' uniformly. With `normalized = TRUE`, `H` is divided by its maximum so it
+#' is comparable across vectors of different lengths.
+#'
+#' @param p A numeric vector of probabilities (entries in [0, 1], summing to
+#'   1), e.g. the output of [create_prob()]. Zero entries contribute 0.
+#' @param log_base Positive base of the logarithm; 2 gives entropy in bits
+#'   (default), `exp(1)` gives nats.
+#' @param na_rm Logical; if `TRUE`, `NA` values are dropped before the
+#'   computation; if `FALSE` (default), any `NA` returns `NA_real_`.
+#' @param normalized Logical; if `TRUE`, divide by `log(length(p),
+#'   base = log_base)` so the result lies in \code{[0, 1]}. Vectors with
+#'   fewer than two (non-NA) entries return `NA_real_`.
+#'
+#' @return A single numeric value: the (optionally normalized) Shannon
+#'   entropy of `p`, or `NA_real_` for degenerate input.
+#' @export
+#'
+#' @examples
+#' entropy(create_prob(c(4, 1)))   # 0.722 bits: two samples
+#' entropy(create_prob(c(1, 0, 0)))  # 0 bits: single sample
+#' entropy(create_prob(c(1, 1, 1, 1)), normalized = TRUE)  # 1: uniform
+entropy <- function(p, log_base = 2, na_rm = FALSE, normalized = FALSE) {
+  if ((!is.numeric(p) && !is.logical(p)) || is.matrix(p)) {
+    stop("p must be a numeric vector.")
+  }
+  if (!is.numeric(log_base) || length(log_base) != 1 || log_base <= 0 ||
+      log_base == 1 || is.na(log_base)) {
+    stop("log_base must be a single positive number other than 1.")
+  }
+  if (!is.logical(normalized) || length(normalized) != 1 || is.na(normalized)) {
+    stop("normalized must be a single TRUE or FALSE.")
+  }
+  p <- as.numeric(p)
+  if (!na_rm && anyNA(p)) {
+    return(NA_real_)
+  }
+  p <- p[!is.na(p)]
+  if (length(p) == 0) {
+    return(NA_real_)
+  }
+  if (any(p < 0 | p > 1)) {
+    stop("p must be probabilities between 0 and 1.")
+  }
+  term <- ifelse(p > 0, p * log(p) / log(log_base), ifelse(p == 0, 0, NA_real_))
+  h <- -sum(term, na.rm = TRUE)
+  if (!normalized) {
+    return(h)
+  }
+  if (length(p) < 2) {
+    return(NA_real_)
+  }
+  h_max <- log(length(p), base = log_base)
+  h / h_max
+}
