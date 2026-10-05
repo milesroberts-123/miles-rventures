@@ -134,6 +134,7 @@ library(rventures)
 - `expr_sample_meta()` — validated sample metadata table (S samples x any number of annotation columns)
 - `tau()` — cell-type specificity index of an expression vector (0 = ubiquitous, 1 = single sample), with NA-handling modes
 - `mean_no_zeros()` — mean expression conditioned on expression above a threshold
+- `create_prob()` — rescale an expression vector to fractions of its total (`x/sum(x)`), with NA handling and a zero-total guard
 
 ### File management
 

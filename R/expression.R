@@ -161,3 +161,39 @@ mean_no_zeros <- function(x, thresh) {
   }
   mean(y, na.rm = TRUE)
 }
+
+#' Rescale an expression vector to probabilities
+#'
+#' Divides an expression vector by its sum, turning values into fractions of
+#' the total: e.g. one gene's expression shares across samples, or (with
+#' [apply()]) one sample's expression shares across genes.
+#'
+#' @param x A numeric vector of expression values for one gene (or one
+#'   sample, when applied column- or row-wise with [apply()]).
+#' @param na_rm Logical; if `TRUE`, `NA` values are dropped before summing
+#'   and the remaining values are renormalized; if `FALSE` (default), any
+#'   `NA` propagates and the result is all `NA`.
+#'
+#' @return A numeric vector of the same length as `x` (after NA removal)
+#'   summing to 1, or `NA_real_` if the sum is zero, `NA`, or undefined.
+#' @export
+#'
+#' @examples
+#' create_prob(c(4, 1))         # c(0.8, 0.2)
+#' create_prob(c(0, 0, 0))      # NA_real_: zero total
+#' create_prob(c(NA, 2, 6), na_rm = TRUE)  # c(0.25, 0.75)
+create_prob <- function(x, na_rm = FALSE) {
+  if ((!is.numeric(x) && !is.logical(x)) || is.matrix(x)) {
+    stop("x must be a numeric vector.")
+  }
+  x <- as.numeric(x)
+  if (!na_rm && anyNA(x)) {
+    return(rep(NA_real_, length(x)))
+  }
+  x <- x[!is.na(x)]
+  total <- sum(x, na.rm = TRUE)
+  if (length(x) == 0 || is.na(total) || total == 0) {
+    return(NA_real_)
+  }
+  x / total
+}
