@@ -4,7 +4,13 @@
 \alias{gt_from_pmat}
 \title{G statistics with Buffalo-Coop-canonical variance denominator}
 \usage{
-gt_from_pmat(pmat, n = NULL, correct_for_n = TRUE)
+gt_from_pmat(
+  pmat,
+  n = NULL,
+  correct_for_n = TRUE,
+  procedure = "none",
+  windows = NULL
+)
 }
 \arguments{
 \item{pmat}{Numeric matrix of allele frequencies; the first column is the
@@ -14,12 +20,24 @@ tibbles are coerced to matrices.}
 \item{n}{Optional numeric vector of sample sizes (number of chromosomes,
 i.e. gene copies) sampled per time point. Must have one entry per time
 point (i.e., \code{ncol(pmat)}) when supplied, and all entries must be at
-least 2. Passed to \code{\link[=covmat_from_pmat]{covmat_from_pmat()}}, and its first entry gives the
+least 2. Used by \code{\link[=correct_covmat_for_n]{correct_covmat_for_n()}}, and its first entry gives the
 \code{n / (n - 1)} bias correction of the time-zero heterozygosity divisor,
 matching the correction applied by \code{\link[=standard_cov_by_het]{standard_cov_by_het()}}.}
 
 \item{correct_for_n}{Boolean; whether to correct variances and covariances
 for finite sample size.}
+
+\item{procedure}{Sign randomization procedure passed to
+\code{\link[=sign_permute_increments]{sign_permute_increments()}}; use \code{"none"} (default) for no
+randomization. A randomization procedure is drawn \strong{once} and shared by
+both denominator constructions, so passing \code{"window"}, \code{"cell"}, or
+\code{"genome"} with \code{windows} as needed yields the sign-permuted null
+versions of \emph{all} the G columns; under randomization the shared-sample
+noise add-back of \code{\link[=correct_covmat_for_n]{correct_covmat_for_n()}} is omitted automatically, as
+in \code{\link[=covmat_from_pmat]{covmat_from_pmat()}}.}
+
+\item{windows}{Optional vector of window IDs, one per row of \code{pmat},
+required by \code{\link[=sign_permute_increments]{sign_permute_increments()}} when \code{procedure = "window"}.}
 }
 \value{
 A data.frame with one row per time point, as in \code{\link[=gt_from_covmat]{gt_from_covmat()}},

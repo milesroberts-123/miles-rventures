@@ -1765,6 +1765,39 @@ test_that("gt_from_pmat single interval and n validation", {
   )
 })
 
+test_that("gt_from_pmat shares one sign draw across both denominators", {
+  # "genome" flips whole columns: variances are exactly invariant (s^2 = 1
+  # keeps means and second moments intact) while covariance sums redraw.
+  # "cell" and "window" reshuffle within-column means too, so their variances
+  # differ at the centering scale; the draw is still a single one shared by
+  # both denominator constructions.
+  pmat <- matrix(c(0.2, 0.6, 0.8,
+                   0.8, 0.4, 0.2,
+                   0.4, 0.2, 0.4,
+                   0.6, 0.8, 0.6),
+                 nrow = 4, ncol = 3, byrow = TRUE)
+  set.seed(21)
+  res_none <- gt_from_pmat(pmat, correct_for_n = FALSE)
+  set.seed(1)
+  res_genome <- gt_from_pmat(pmat, correct_for_n = FALSE, procedure = "genome")
+  expect_equal(res_genome$sum_var, res_none$sum_var)
+  expect_false(isTRUE(all.equal(res_none$sum_cov, res_genome$sum_cov)))
+  set.seed(21)
+  res_cell <- gt_from_pmat(pmat, correct_for_n = FALSE, procedure = "cell")
+  expect_true(all(is.finite(res_cell$gt_bnc)))
+  expect_true(all(is.finite(res_cell$gt_bnc_abs)))
+  # window procedure threads windows through to the permutation
+  set.seed(21)
+  res_win <- gt_from_pmat(pmat, correct_for_n = FALSE, procedure = "window",
+                          windows = c(1, 1, 2, 2))
+  expect_true(all(is.finite(res_win$gt_bnc)))
+  expect_error(
+    gt_from_pmat(pmat, correct_for_n = FALSE, procedure = "window",
+                 windows = NULL),
+    "windows"
+  )
+})
+
 # ---------------------------------------------------------------------------
 # sign_permute_increments: granularity of the destructive null
 # ---------------------------------------------------------------------------

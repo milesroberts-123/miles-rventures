@@ -1215,11 +1215,21 @@ gt_from_covmat <- function(covmat) {
 #' @param n Optional numeric vector of sample sizes (number of chromosomes,
 #'   i.e. gene copies) sampled per time point. Must have one entry per time
 #'   point (i.e., `ncol(pmat)`) when supplied, and all entries must be at
-#'   least 2. Passed to [covmat_from_pmat()], and its first entry gives the
+#'   least 2. Used by [correct_covmat_for_n()], and its first entry gives the
 #'   `n / (n - 1)` bias correction of the time-zero heterozygosity divisor,
 #'   matching the correction applied by [standard_cov_by_het()].
 #' @param correct_for_n Boolean; whether to correct variances and covariances
 #'   for finite sample size.
+#' @param procedure Sign randomization procedure passed to
+#'   [sign_permute_increments()]; use `"none"` (default) for no
+#'   randomization. A randomization procedure is drawn **once** and shared by
+#'   both denominator constructions, so passing `"window"`, `"cell"`, or
+#'   `"genome"` with `windows` as needed yields the sign-permuted null
+#'   versions of *all* the G columns; under randomization the shared-sample
+#'   noise add-back of [correct_covmat_for_n()] is omitted automatically, as
+#'   in [covmat_from_pmat()].
+#' @param windows Optional vector of window IDs, one per row of `pmat`,
+#'   required by [sign_permute_increments()] when `procedure = "window"`.
 #'
 #' @return A data.frame with one row per time point, as in [gt_from_covmat()],
 #'   with three additional columns: `sum_var_bc` (the B&C-canonical
@@ -1231,15 +1241,30 @@ gt_from_covmat <- function(covmat) {
 #' set.seed(1)
 #' pmat <- matrix(runif(15), nrow = 5, ncol = 3)
 #' gt_from_pmat(pmat, correct_for_n = FALSE)
-gt_from_pmat <- function(pmat, n = NULL, correct_for_n = TRUE) {
+gt_from_pmat <- function(pmat, n = NULL, correct_for_n = TRUE,
+                         procedure = "none", windows = NULL) {
   pmat <- as.matrix(pmat)
   if (!is.null(n)) {
     stopifnot(length(n) == ncol(pmat), all(n >= 2))
   }
-  covmat <- covmat_from_pmat(pmat, n = n, correct_for_n = correct_for_n,
-                             standard_by_het = TRUE)
-  covmat_raw <- covmat_from_pmat(pmat, n = n, correct_for_n = correct_for_n,
-                                 standard_by_het = FALSE)
+  # the sign draw is taken once and both denominator constructions consume
+  # the same permuted increments; separate covmat_from_pmat(procedure = ...)
+  # calls would redraw signs independently for each
+  pdiff <- freq_increments(pmat)
+  pdiff <- sign_permute_increments(pdiff, procedure = procedure,
+                                  windows = windows)
+  if (is.null(dim(pdiff))) {
+    pdiff <- matrix(pdiff, ncol = 1)
+  }
+  pdiff <- as.matrix(pdiff)
+  covmat_raw <- stats::cov(pdiff, use = "pairwise.complete.obs")
+  if (correct_for_n) {
+    covmat_raw <- correct_covmat_for_n(pmat, covmat_raw, n,
+                                       input_asin_trans = FALSE,
+                                       pdiff = pdiff,
+                                       shared_sample_noise =
+                                         identical(procedure, "none"))
+  }
   # B&C-canonical denominator: the raw cumulative variance (which decomposes
   # exactly into the top-left rolling sum of the covariance matrix) divided
   # once by the summed half heterozygosity of the initial generation
@@ -1250,6 +1275,9 @@ gt_from_pmat <- function(pmat, n = NULL, correct_for_n = TRUE) {
   }
   stopifnot(half_het_sum_0 > 0)
   sums_var_bc <- rolling_matrix_sum(covmat_raw) / half_het_sum_0
+  n_het <- if (is.null(n)) NULL else n[-length(n)]
+  covmat <- standard_cov_by_het(pmat[, -ncol(pmat), drop = FALSE], covmat_raw,
+                                n = n_het)
   # strict off-diagonal sums of the top-left squares of the (standardized)
   # covariance matrix, i.e. cvtk calc_G's numerator
   sums_offdiag_bnc <- rolling_matrix_sum(covmat) - cumsum(diag(covmat))
