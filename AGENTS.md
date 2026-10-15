@@ -18,4 +18,5 @@ An R package of convenience functions for use across RStudio projects (per `READ
 
 - Branch: `main`; remote `origin` → `github.com/milesroberts-123/miles-rventures.git`.
 - Never push to `main` without asking first.
+- Bump the package Version in `DESCRIPTION` with each update commit: `fix:` → patch bump (0.2.0 → 0.2.1), `feat:` → minor bump (0.2.0 → 0.3.0); breaking changes → major. Tests/docs-only commits don't bump. The bump shares the update commit, before the transcript-archive commit.
 - Before every push: export the full OpenCode transcript as raw JSON (`opencode export <session-id>`), compress it with `xz -9` (`session-<short-id>.json.xz` in the repo root), keeping only the compressed archive.
