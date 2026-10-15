@@ -865,6 +865,22 @@ standard_cov_by_het <- function(pmat, covmat, n = NULL) {
 #'   chromosomes, not diploid individuals.
 #' @param input_asin_trans Boolean; whether `pmat` holds arcsine-square-root
 #'   transformed frequencies (changes the sample size correction formulas).
+#' @param pdiff Optional matrix of allele frequency changes with one row per
+#'   variant and one column per interval, used for the raw-frequency moment
+#'   terms instead of the changes implied by `pmat`: pass this when `covmat`
+#'   was computed from modified changes, e.g. the sign-permuted changes of
+#'   [covmat_from_pmat()]'s randomization procedures. Heterozygosity terms
+#'   always come from `pmat`. Not used by the arcsine-transformed formulas;
+#'   supplying it with `input_asin_trans = TRUE` is an error.
+#' @param shared_sample_noise Boolean; whether adjacent-interval entries
+#'   include the shared-sample noise add-back (`+mean p(1-p)/(n-1)` on raw
+#'   frequencies, `+1/n` on transformed frequencies): sampling error at a
+#'   time point shared by two adjacent intervals contributes that term. Set
+#'   to `FALSE` when the changes have been sign-randomized at the interval
+#'   level — any of [covmat_from_pmat()]'s `"window"`, `"cell"`, or
+#'   `"genome"` procedures — which destroys this coupling and would
+#'   otherwise offset the permuted entries by exactly the add-back.
+#'   Variance corrections are unaffected.
 #'
 #' @return The sample-size-corrected covariance matrix of allele frequency
 #'   changes.
@@ -875,7 +891,8 @@ standard_cov_by_het <- function(pmat, covmat, n = NULL) {
 #' pmat <- matrix(runif(15), nrow = 5, ncol = 3)
 #' covmat <- stats::cov(freq_increments(pmat))
 #' correct_covmat_for_n(pmat, covmat, n = c(50, 50, 50))
-correct_covmat_for_n <- function(pmat, covmat, n, input_asin_trans = FALSE) {
+correct_covmat_for_n <- function(pmat, covmat, n, input_asin_trans = FALSE,
+                                 pdiff = NULL, shared_sample_noise = TRUE) {
   pmat <- as.matrix(pmat)
   stopifnot(ncol(pmat) - 1 == ncol(covmat))
   if (any(n < 2)) {
@@ -884,12 +901,28 @@ correct_covmat_for_n <- function(pmat, covmat, n, input_asin_trans = FALSE) {
   if (length(n) != (ncol(covmat) + 1)) {
     stop("Should be a sample size for every time point.")
   }
+  if (!is.logical(shared_sample_noise) || length(shared_sample_noise) != 1 ||
+      is.na(shared_sample_noise)) {
+    stop("shared_sample_noise must be a single TRUE or FALSE.")
+  }
+  if (!is.null(pdiff)) {
+    if (input_asin_trans) {
+      stop("pdiff is only used with raw (non-transformed) input.")
+    }
+    pdiff <- as.matrix(pdiff)
+    if (nrow(pdiff) != nrow(pmat) || ncol(pdiff) != ncol(covmat)) {
+      stop("pdiff must have one row per variant and one column per interval.")
+    }
+  }
   ### ARCSIN-SQRT TRANSFORMED FREQUENCIES ###
   if (input_asin_trans) {
     # correct overlapping covariances
     # seq_len() yields integer(0) when ncol(covmat) == 1, so this is skipped
     for (i in seq_len(ncol(covmat) - 1)) {
-      corrected_cov <- covmat[i, i + 1] + (1 / n[i + 1])
+      corrected_cov <- covmat[i, i + 1]
+      if (shared_sample_noise) {
+        corrected_cov <- corrected_cov + (1 / n[i + 1])
+      }
       covmat[i, i + 1] <- corrected_cov
       covmat[i + 1, i] <- corrected_cov
     }
@@ -905,12 +938,18 @@ correct_covmat_for_n <- function(pmat, covmat, n, input_asin_trans = FALSE) {
     }
     ### RAW FREQUENCIES ###
   } else {
-    pdiff <- freq_increments(pmat)
+    if (is.null(pdiff)) {
+      pdiff <- freq_increments(pmat)
+    }
+    pdiff <- as.matrix(pdiff)
     # correct overlapping covariances
     # seq_len() yields integer(0) when ncol(covmat) == 1, so this is skipped
     for (i in seq_len(ncol(covmat) - 1)) {
-      corrected_cov <- mean(pdiff[, i] * pdiff[, i + 1], na.rm = TRUE) +
-        mean(pmat[, i + 1] * (1 - pmat[, i + 1]) / (n[i + 1] - 1), na.rm = TRUE)
+      corrected_cov <- mean(pdiff[, i] * pdiff[, i + 1], na.rm = TRUE)
+      if (shared_sample_noise) {
+        corrected_cov <- corrected_cov +
+          mean(pmat[, i + 1] * (1 - pmat[, i + 1]) / (n[i + 1] - 1), na.rm = TRUE)
+      }
       covmat[i, i + 1] <- corrected_cov
       covmat[i + 1, i] <- corrected_cov
     }
@@ -956,7 +995,14 @@ correct_covmat_for_n <- function(pmat, covmat, n, input_asin_trans = FALSE) {
 #'   transformed frequencies (changes the sample size correction formulas).
 #' @param procedure Sign randomization procedure passed to
 #'   [sign_permute_increments()]; use `"none"` (default) for no
-#'   randomization.
+#'   randomization. With randomization, the covariance entries are computed
+#'   from the sign-permuted changes, and the variance and adjacent entries
+#'   of the sample-size correction are re-estimated from those same permuted
+#'   changes. Every randomization procedure flips signs interval-wise (per
+#'   window, entry, or column), which destroys the shared-sample noise
+#'   coupling between adjacent intervals, so the shared-sample noise
+#'   add-back is omitted (`shared_sample_noise = FALSE` in
+#'   [correct_covmat_for_n()]) and the permuted entries center at zero.
 #' @param windows Optional vector of window IDs, one per row of `pmat`,
 #'   passed to [sign_permute_increments()] when `procedure = "window"`.
 #'
@@ -990,7 +1036,9 @@ covmat_from_pmat <- function(pmat, n = NULL, correct_for_n = TRUE,
       warning("Are you sure values are arcsin transformed?")
     }
     covmat <- correct_covmat_for_n(pmat, covmat, n,
-                                   input_asin_trans = input_asin_trans)
+                                   input_asin_trans = input_asin_trans,
+                                   pdiff = if (input_asin_trans) NULL else pdiff,
+                                   shared_sample_noise = identical(procedure, "none"))
   }
 
   if (standard_by_het) {

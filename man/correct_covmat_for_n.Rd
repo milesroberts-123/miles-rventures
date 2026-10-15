@@ -4,7 +4,14 @@
 \alias{correct_covmat_for_n}
 \title{Correct a covariance matrix of allele frequency changes for sample size}
 \usage{
-correct_covmat_for_n(pmat, covmat, n, input_asin_trans = FALSE)
+correct_covmat_for_n(
+  pmat,
+  covmat,
+  n,
+  input_asin_trans = FALSE,
+  pdiff = NULL,
+  shared_sample_noise = TRUE
+)
 }
 \arguments{
 \item{pmat}{Numeric matrix of allele frequencies, rows = variants,
@@ -22,6 +29,24 @@ chromosomes, not diploid individuals.}
 
 \item{input_asin_trans}{Boolean; whether \code{pmat} holds arcsine-square-root
 transformed frequencies (changes the sample size correction formulas).}
+
+\item{pdiff}{Optional matrix of allele frequency changes with one row per
+variant and one column per interval, used for the raw-frequency moment
+terms instead of the changes implied by \code{pmat}: pass this when \code{covmat}
+was computed from modified changes, e.g. the sign-permuted changes of
+\code{\link[=covmat_from_pmat]{covmat_from_pmat()}}'s randomization procedures. Heterozygosity terms
+always come from \code{pmat}. Not used by the arcsine-transformed formulas;
+supplying it with \code{input_asin_trans = TRUE} is an error.}
+
+\item{shared_sample_noise}{Boolean; whether adjacent-interval entries
+include the shared-sample noise add-back (\verb{+mean p(1-p)/(n-1)} on raw
+frequencies, \code{+1/n} on transformed frequencies): sampling error at a
+time point shared by two adjacent intervals contributes that term. Set
+to \code{FALSE} when the changes have been sign-randomized at the interval
+level — any of \code{\link[=covmat_from_pmat]{covmat_from_pmat()}}'s \code{"window"}, \code{"cell"}, or
+\code{"genome"} procedures — which destroys this coupling and would
+otherwise offset the permuted entries by exactly the add-back.
+Variance corrections are unaffected.}
 }
 \value{
 The sample-size-corrected covariance matrix of allele frequency

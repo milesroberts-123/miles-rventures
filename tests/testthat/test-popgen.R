@@ -721,6 +721,133 @@ test_that("covmat_from_pmat works with a single interval (2 time points)", {
   expect_equal(unname(cm[1, 1]), stats::var(pd))
 })
 
+test_that("correct_covmat_for_n estimates moments from a supplied pdiff", {
+  set.seed(3)
+  pmat <- matrix(runif(25), nrow = 5, ncol = 5)
+  n <- c(60, 40, 90, 20, 70)
+  pdiff_perm <- freq_increments(pmat) *
+    matrix(sample(c(-1, 1), size = 20, replace = TRUE), nrow = 5)
+  cov_perm <- stats::cov(pdiff_perm)
+  corrected <- expect_warning(
+    correct_covmat_for_n(pmat, cov_perm, n, pdiff = pdiff_perm),
+    NA
+  )
+  for (i in 1:3) {
+    expect_equal(corrected[i, i + 1],
+                 mean(pdiff_perm[, i] * pdiff_perm[, i + 1]) +
+                   mean(pmat[, i + 1] * (1 - pmat[, i + 1]) / (n[i + 1] - 1)))
+    expect_equal(corrected[i, i],
+                 mean(pdiff_perm[, i]^2) -
+                   mean(pmat[, i] * (1 - pmat[, i]) / (n[i] - 1)) -
+                   mean(pmat[, i + 1] * (1 - pmat[, i + 1]) / (n[i + 1] - 1)))
+  }
+  # non-adjacent entries pass through from covmat
+  expect_equal(corrected[1, 3], cov_perm[1, 3])
+})
+
+test_that("correct_covmat_for_n can omit the shared-sample noise add-back", {
+  set.seed(4)
+  pmat <- matrix(runif(20), nrow = 5, ncol = 4)
+  n <- c(50, 50, 50, 50)
+  pdiff <- freq_increments(pmat)
+  cov_raw <- stats::cov(pdiff)
+  full <- expect_warning(correct_covmat_for_n(pmat, cov_raw, n), NA)
+  trimmed <- expect_warning(
+    correct_covmat_for_n(pmat, cov_raw, n, shared_sample_noise = FALSE), NA
+  )
+  expect_equal(trimmed[1, 2], mean(pdiff[, 1] * pdiff[, 2]))
+  expect_equal(trimmed[1, 2],
+               full[1, 2] - mean(pmat[, 2] * (1 - pmat[, 2]) / (n[2] - 1)))
+  # variance corrections are unaffected by the flag
+  expect_equal(trimmed[1, 1], full[1, 1])
+  expect_equal(trimmed[3, 3], full[3, 3])
+  # non-adjacent entries untouched either way
+  expect_equal(trimmed[1, 3], full[1, 3])
+})
+
+test_that("correct_covmat_for_n validates pdiff and shared_sample_noise", {
+  set.seed(5)
+  pmat <- matrix(runif(20), nrow = 5, ncol = 4)
+  n <- c(50, 50, 50, 50)
+  pdiff <- freq_increments(pmat)
+  cov_raw <- stats::cov(pdiff)
+  expect_error(correct_covmat_for_n(pmat, cov_raw, n, input_asin_trans = TRUE,
+                                    pdiff = pdiff), "pdiff is only used")
+  expect_error(correct_covmat_for_n(pmat, cov_raw, n, pdiff = pdiff[1:4, ]),
+               "one row per variant")
+  expect_error(correct_covmat_for_n(pmat, cov_raw, n, pdiff = pdiff[, 1:2]),
+               "one row per variant")
+  expect_error(correct_covmat_for_n(pmat, cov_raw, n,
+                                    shared_sample_noise = "yes"),
+               "shared_sample_noise")
+})
+
+test_that("asin-mode adjacent add-back respects shared_sample_noise", {
+  set.seed(6)
+  pmat <- arcsin_sqrt(matrix(runif(20), nrow = 5, ncol = 4))
+  cov_asin <- stats::cov(freq_increments(pmat))
+  n <- c(50, 50, 50, 50)
+  full <- suppressWarnings(correct_covmat_for_n(pmat, cov_asin, n,
+                                                input_asin_trans = TRUE))
+  trimmed <- suppressWarnings(correct_covmat_for_n(pmat, cov_asin, n,
+                                                   input_asin_trans = TRUE,
+                                                   shared_sample_noise = FALSE))
+  expect_equal(full[1, 2], cov_asin[1, 2] + 1 / n[2])
+  expect_equal(trimmed[1, 2], cov_asin[1, 2])
+  expect_equal(trimmed[1, 1], full[1, 1])
+})
+
+test_that("covmat_from_pmat corrects per-interval permuted changes without the offset", {
+  set.seed(7)
+  pmat <- matrix(runif(40), nrow = 10, ncol = 4)
+  n <- c(80, 80, 80, 80)
+  set.seed(8)
+  cm_cell <- covmat_from_pmat(pmat, n = n, procedure = "cell")
+  set.seed(8)
+  pdiff_perm <- as.matrix(sign_permute_increments(freq_increments(pmat),
+                                                  procedure = "cell"))
+  expect_equal(cm_cell[1, 2], mean(pdiff_perm[, 1] * pdiff_perm[, 2]))
+  expect_equal(cm_cell[1, 1],
+               mean(pdiff_perm[, 1]^2) -
+                 mean(pmat[, 1] * (1 - pmat[, 1]) / (n[1] - 1)) -
+                 mean(pmat[, 2] * (1 - pmat[, 2]) / (n[2] - 1)))
+  # genome procedure: adjacent entries are the raw moment re-signed
+  pdiff <- freq_increments(pmat)
+  raw_moment <- mean(pdiff[, 1] * pdiff[, 2])
+  set.seed(9)
+  cm_genome <- covmat_from_pmat(pmat, n = n, procedure = "genome")
+  set.seed(9)
+  signs <- sample(c(-1, 1), size = ncol(pdiff), replace = TRUE)
+  expect_equal(cm_genome[1, 2], signs[1] * signs[2] * raw_moment)
+})
+
+test_that("covmat_from_pmat keeps legacy behavior for none and re-estimates window entries", {
+  set.seed(10)
+  pmat <- matrix(runif(40), nrow = 10, ncol = 4)
+  n <- c(80, 80, 80, 80)
+  cm_none <- covmat_from_pmat(pmat, n = n, procedure = "none")
+  legacy <- correct_covmat_for_n(pmat,
+                                 stats::cov(freq_increments(pmat),
+                                            use = "pairwise.complete.obs"), n)
+  expect_equal(unname(cm_none), unname(legacy))
+  # window procedure: interval-wise flips move the adjacent entries, which
+  # are re-estimated from the permuted changes without the add-back
+  windows <- rep(1:2, times = c(5, 5))
+  set.seed(11)
+  cm_window <- covmat_from_pmat(pmat, n = n, procedure = "window",
+                                windows = windows)
+  set.seed(11)
+  pdiff_window <- as.matrix(sign_permute_increments(freq_increments(pmat),
+                                                    procedure = "window",
+                                                    windows = windows))
+  expect_equal(cm_window[1, 2], mean(pdiff_window[, 1] * pdiff_window[, 2]))
+  expect_equal(cm_window[1, 1],
+               mean(pdiff_window[, 1]^2) -
+                 mean(pmat[, 1] * (1 - pmat[, 1]) / (n[1] - 1)) -
+                 mean(pmat[, 2] * (1 - pmat[, 2]) / (n[2] - 1)))
+  expect_equal(cm_window[2, 1], cm_window[1, 2])
+})
+
 test_that("standard_cov_by_het divides by half heterozygosity sums", {
   pmat <- matrix(c(0.5, 0.2, 0.6, 0.3), nrow = 2) # 2 intervals x 2 variants
   covmat <- matrix(c(4, 1, 1, 9), nrow = 2)

@@ -39,7 +39,14 @@ transformed frequencies (changes the sample size correction formulas).}
 
 \item{procedure}{Sign randomization procedure passed to
 \code{\link[=sign_permute_increments]{sign_permute_increments()}}; use \code{"none"} (default) for no
-randomization.}
+randomization. With randomization, the covariance entries are computed
+from the sign-permuted changes, and the variance and adjacent entries
+of the sample-size correction are re-estimated from those same permuted
+changes. Every randomization procedure flips signs interval-wise (per
+window, entry, or column), which destroys the shared-sample noise
+coupling between adjacent intervals, so the shared-sample noise
+add-back is omitted (\code{shared_sample_noise = FALSE} in
+\code{\link[=correct_covmat_for_n]{correct_covmat_for_n()}}) and the permuted entries center at zero.}
 
 \item{windows}{Optional vector of window IDs, one per row of \code{pmat},
 passed to \code{\link[=sign_permute_increments]{sign_permute_increments()}} when \code{procedure = "window"}.}

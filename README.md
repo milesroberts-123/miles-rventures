@@ -104,7 +104,7 @@ library(rventures)
 - `arcsin_sqrt()` — variance-stabilizing arcsine-square-root transform
 - `sum_of_het()`, `geom_pairwise_mean()`, `rolling_matrix_sum()` — small matrix/vector helpers
 - `sign_permute_increments()` — sign randomization (window/cell/genome) for null tests
-- `covmat_from_pmat()` — covariance matrix of allele-frequency changes, with sample-size correction and heterozygosity standardization
+- `covmat_from_pmat()` — covariance matrix of allele-frequency changes, with sample-size correction and heterozygosity standardization; sign-randomized changes are corrected and re-estimated from the permuted changes, and the shared-sample noise term is omitted so permuted entries center at zero
 - `standard_cov_by_het()` — standardize a covariance matrix by heterozygosity
 - `g_prime()` — linked-selection G statistic corrected for selection-inflated variance
 - `gt_from_covmat()` — G ratios accumulated over nested top-left squares of a covariance matrix
