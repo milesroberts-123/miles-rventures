@@ -41,9 +41,10 @@ required by \code{\link[=sign_permute_increments]{sign_permute_increments()}} wh
 }
 \value{
 A data.frame with one row per time point, as in \code{\link[=gt_from_covmat]{gt_from_covmat()}},
-with three additional columns: \code{sum_var_bc} (the B&C-canonical
-standardized cumulative variance) and the ratios \code{gt_bnc} and
-\code{gt_bnc_abs}.
+with four additional columns: \code{sum_var_bc} (the B&C-canonical
+standardized cumulative variance), the ratios \code{gt_bnc} and
+\code{gt_bnc_abs}, and \code{n_var_clamped} (the number of variance entries set
+to zero by the sample-size correction, constant across rows).
 }
 \description{
 Derives G-style ratios from an allele frequency matrix using both
@@ -58,6 +59,17 @@ off-diagonal covariances in the numerator and this single-adjustment
 denominator in the denominator; because the denominator keeps signed
 cross-terms, both can leave \link{0, 1} when covariances are negative, unlike
 the bounded \code{gt} variants.
+}
+\details{
+Two deliberate divergences from cvtk: (1) the sampling-bias corrections of
+\code{\link[=correct_covmat_for_n]{correct_covmat_for_n()}} clamp a corrected variance to zero rather than
+keeping it when it turns negative (cvtk \code{cov.py:403-412} warns — only if
+\code{warn = TRUE}, never set by \code{calc_G}'s call path — and silently keeps the
+negative corrected variance); \code{sum_var_bc} therefore inherits the clamped
+diagonals. (2) The count of clamped variances is reported in the
+\code{n_var_clamped} column so affected windows are identifiable in saved
+tables: degenerate intervals (clamped or zero raw variance) produce
+\code{NaN} \code{gt_bnc} entries where the cumulative variance is zero.
 }
 \examples{
 set.seed(1)

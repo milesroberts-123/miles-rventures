@@ -926,6 +926,7 @@ correct_covmat_for_n <- function(pmat, covmat, n, input_asin_trans = FALSE,
       stop("pdiff must have one row per variant and one column per interval.")
     }
   }
+  n_clamped <- 0L
   ### ARCSIN-SQRT TRANSFORMED FREQUENCIES ###
   if (input_asin_trans) {
     # correct overlapping covariances
@@ -944,6 +945,7 @@ correct_covmat_for_n <- function(pmat, covmat, n, input_asin_trans = FALSE,
       if (corrected_var < 0) {
         warning("Sample size correction makes variance negative. Setting variance to zero")
         covmat[i, i] <- 0
+        n_clamped <- n_clamped + 1L
       } else {
         covmat[i, i] <- corrected_var
       }
@@ -973,10 +975,16 @@ correct_covmat_for_n <- function(pmat, covmat, n, input_asin_trans = FALSE,
       if (corrected_var < 0 | is.na(corrected_var)) {
         warning("Sample size correction makes variance negative. Setting variance to zero")
         covmat[i, i] <- 0
+        n_clamped <- n_clamped + 1L
       } else {
         covmat[i, i] <- corrected_var
       }
     }
+  }
+  # attach the count only when clamping occurred: a zero-count attribute
+  # would leak into unname() comparisons in downstream tests
+  if (n_clamped > 0L) {
+    attr(covmat, "n_var_clamped") <- n_clamped
   }
   covmat
 }
@@ -1209,6 +1217,16 @@ gt_from_covmat <- function(covmat) {
 #' cross-terms, both can leave [0, 1] when covariances are negative, unlike
 #' the bounded `gt` variants.
 #'
+#' Two deliberate divergences from cvtk: (1) the sampling-bias corrections of
+#' [correct_covmat_for_n()] clamp a corrected variance to zero rather than
+#' keeping it when it turns negative (cvtk `cov.py:403-412` warns — only if
+#' `warn = TRUE`, never set by `calc_G`'s call path — and silently keeps the
+#' negative corrected variance); `sum_var_bc` therefore inherits the clamped
+#' diagonals. (2) The count of clamped variances is reported in the
+#' `n_var_clamped` column so affected windows are identifiable in saved
+#' tables: degenerate intervals (clamped or zero raw variance) produce
+#' `NaN` `gt_bnc` entries where the cumulative variance is zero.
+#'
 #' @param pmat Numeric matrix of allele frequencies; the first column is the
 #'   initial generation and time points ascend left to right. Data frames and
 #'   tibbles are coerced to matrices.
@@ -1232,9 +1250,10 @@ gt_from_covmat <- function(covmat) {
 #'   required by [sign_permute_increments()] when `procedure = "window"`.
 #'
 #' @return A data.frame with one row per time point, as in [gt_from_covmat()],
-#'   with three additional columns: `sum_var_bc` (the B&C-canonical
-#'   standardized cumulative variance) and the ratios `gt_bnc` and
-#'   `gt_bnc_abs`.
+#'   with four additional columns: `sum_var_bc` (the B&C-canonical
+#'   standardized cumulative variance), the ratios `gt_bnc` and
+#'   `gt_bnc_abs`, and `n_var_clamped` (the number of variance entries set
+#'   to zero by the sample-size correction, constant across rows).
 #' @export
 #'
 #' @examples
@@ -1286,6 +1305,9 @@ gt_from_pmat <- function(pmat, n = NULL, correct_for_n = TRUE,
   result$sum_var_bc <- sums_var_bc
   result$gt_bnc <- sums_offdiag_bnc / sums_var_bc
   result$gt_bnc_abs <- sums_offdiag_abs_bnc / sums_var_bc
+  result$n_var_clamped <-
+    if (is.null(attr(covmat_raw, "n_var_clamped"))) 0L
+    else as.integer(attr(covmat_raw, "n_var_clamped"))
   return(result)
 }
 

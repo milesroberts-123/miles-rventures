@@ -1708,7 +1708,8 @@ test_that("gt_from_pmat gt_bnc equals gt with constant heterozygosity", {
   expect_named(result, c("gen", "gt", "gt_abs", "gt_abs_2", "gt_pos",
                          "sum_cov", "sum_abs_cov", "sum_pos_cov",
                          "sum_neg_cov", "sum_var", "ratio", "sum_var_bc",
-                         "gt_bnc", "gt_bnc_abs"))
+                         "gt_bnc", "gt_bnc_abs", "n_var_clamped"))
+  expect_equal(result$n_var_clamped, rep(0L, 2))
   expect_equal(result$gt_bnc, result$gt)
   expect_equal(result$gt_bnc_abs, result$gt_abs)
   # positive-covariance hand check: var1 = 2/15, var2 = 2/45, cov = 2/75
@@ -1796,6 +1797,32 @@ test_that("gt_from_pmat shares one sign draw across both denominators", {
                  windows = NULL),
     "windows"
   )
+})
+
+test_that("gt_from_pmat reports clamped variances in n_var_clamped", {
+  # interval 1 has raw variance far below the sampling-noise floor for
+  # n1 = 2 (bias ~ mean p0(1-p0)/(n1-1) ~ 0.22), so its corrected variance
+  # is negative and gets clamped to zero; interval 2's n = 1000 keeps it
+  # above the floor
+  pmat <- matrix(c(0.30, 0.30, 0.60,
+                   0.40, 0.38, 0.20), nrow = 2, ncol = 3, byrow = TRUE)
+  expect_warning(
+    res <- gt_from_pmat(pmat, n = c(2, 1000, 1000)),
+    "variance negative"
+  )
+  expect_equal(res$n_var_clamped, rep(1L, 2))
+  # clamped interval: zero cumulative variance -> degenerate 0/0 gt_bnc
+  expect_equal(res$sum_var_bc[1], 0)
+  expect_true(is.na(res$gt_bnc[1]))
+  # interval 2 accumulates the unclamped variance and a finite gt_bnc
+  expect_true(res$sum_var_bc[2] > 0)
+  expect_true(is.finite(res$gt_bnc[2]))
+
+  # clean data: no clamping anywhere, count column stays zero
+  set.seed(3)
+  pmat_ok <- matrix(runif(15, 0.3, 0.7), nrow = 5, ncol = 3)
+  res_ok <- gt_from_pmat(pmat_ok, n = rep(200, 3))
+  expect_equal(res_ok$n_var_clamped, rep(0L, 2))
 })
 
 # ---------------------------------------------------------------------------
