@@ -11,8 +11,8 @@ sign_permute_increments(pdiff, procedure = "none", windows = NULL)
 variants, columns = time intervals).}
 
 \item{procedure}{One of \code{"none"} (return input unchanged), \code{"window"}
-(one random sign per genomic window, applied to all variants in the
-window), \code{"cell"} (one random sign per matrix entry), or \code{"genome"}
+(one random sign per window and interval, applied to all variants in
+the window), \code{"cell"} (one random sign per matrix entry), or \code{"genome"}
 (one random sign per column). Invalid values raise an error.}
 
 \item{windows}{Numeric or character vector of window IDs, one per row of
@@ -28,6 +28,19 @@ Randomly multiplies allele frequency changes by +1 or -1 at one of several
 granularities, for use in randomization tests of linked selection.
 Because covariance is signed, flipping signs breaks real shared-direction
 structure while preserving per-element magnitudes.
+}
+\details{
+The \code{"window"} procedure draws an independent random sign for every window
+and time interval combination and applies it to all variants of that
+window: the covariance between two intervals is thereby multiplied by a
+freshly drawn +/-1, which destroys the systematic temporal covariance
+created by linked selection while preserving within-window linkage
+disequilibrium and covariance magnitudes. This mirrors the empirical
+neutral null of Buffalo and Coop (2020), who sign-permute allele frequency
+changes within genomic windows (PNAS supplementary material section S5).
+Note that one shared sign per window across all intervals at once would be
+a mathematical no-op, since s^2 = 1 cancels in every covariance element;
+drawing the sign per interval is essential for a destructive null.
 }
 \examples{
 set.seed(1)

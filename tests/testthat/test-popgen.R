@@ -1690,3 +1690,118 @@ test_that("ncne returns 1 for panmictic and matches Pollak for selfing", {
   expect_equal(ncne(0.5), 1 / 0.75)
   expect_error(ncne(1.5))
 })
+
+# ---------------------------------------------------------------------------
+# gt_from_pmat: Buffalo & Coop (2020) canonical variance denominator
+# ---------------------------------------------------------------------------
+
+test_that("gt_from_pmat gt_bnc equals gt with constant heterozygosity", {
+  # every column holds the same multiset of frequencies, so the summed half
+  # heterozygosity is identical across intervals and the single time-zero
+  # divisor of the B&C construction reduces to the per-interval divisors
+  pmat <- matrix(c(0.2, 0.6, 0.8,
+                   0.8, 0.4, 0.2,
+                   0.4, 0.2, 0.4,
+                   0.6, 0.8, 0.6),
+                 nrow = 4, ncol = 3, byrow = TRUE)
+  result <- gt_from_pmat(pmat, correct_for_n = FALSE)
+  expect_named(result, c("gen", "gt", "gt_abs", "gt_abs_2", "gt_pos",
+                         "sum_cov", "sum_abs_cov", "sum_pos_cov",
+                         "sum_neg_cov", "sum_var", "ratio", "sum_var_bc",
+                         "gt_bnc", "gt_bnc_abs"))
+  expect_equal(result$gt_bnc, result$gt)
+  expect_equal(result$gt_bnc_abs, result$gt_abs)
+  # positive-covariance hand check: var1 = 2/15, var2 = 2/45, cov = 2/75
+  # (0.8 divisor), so gt_bnc[2] = (2 * 1/30) / 0.3 = 2/9
+  expect_equal(result$gt_bnc[2], 2 / 9)
+  expect_equal(result$sum_var_bc[2], 0.3)
+
+  # identical equivalence survives the full sample-size-corrected path with
+  # equal n, since the divisor correction is uniform across intervals
+  result_n <- gt_from_pmat(pmat, n = c(50, 50, 50), correct_for_n = TRUE)
+  expect_equal(result_n$gt_bnc, result_n$gt)
+  expect_equal(result_n$gt_bnc_abs, result_n$gt_abs)
+})
+
+test_that("gt_from_pmat gt_bnc uses the time-zero divisor under heterozygosity decay", {
+  # interval 1 starts at p = 0.5 (half het sum = 1), interval 2 at p = 0.7/0.3
+  # (half het sum = 0.84). Hand values (sample covariances over 4 variants,
+  # n - 1 = 3): var1 = 4/75, var2 = 4/15, cov = -4/75.
+  pmat <- matrix(c(0.5, 0.7, 0.9,
+                   0.5, 0.7, 0.1,
+                   0.5, 0.3, 0.9,
+                   0.5, 0.3, 0.1),
+                 nrow = 4, ncol = 3, byrow = TRUE)
+  result <- gt_from_pmat(pmat, correct_for_n = FALSE)
+  # gt_bnc: numerator 2 * cov / h1; denominator (var1 + var2 + 2 cov) / h1
+  expect_equal(result$gt_bnc[2], (-8 / 75) / (16 / 75))
+  expect_equal(result$sum_var_bc[2], 16 / 75)
+  # gt divides the variance by the earlier-of-two heterozygosity instead:
+  # gt[2] = 2 * cov / (var1/h1 + var2/h2 + 2*cov/h2) = -21/52
+  expect_equal(result$gt[2], -21 / 52)
+  # the two conventions genuinely diverge under heterozygosity decay
+  expect_false(isTRUE(all.equal(result$gt_bnc[[2]], result$gt[[2]])))
+  # gt_bnc_abs: absolute-valued numerator, still signed-B&C denominator
+  expect_equal(result$gt_bnc_abs[2], (8 / 75) / (16 / 75))
+  expect_false(isTRUE(all.equal(result$gt_bnc_abs[[2]], result$gt_abs[[2]])))
+  expect_equal(result$gt_bnc[1], 0)
+  expect_equal(result$sum_var_bc[1], 4 / 75)
+})
+
+test_that("gt_from_pmat single interval and n validation", {
+  pmat <- matrix(c(0.2, 0.5, 0.6, 0.7), nrow = 2)
+  result <- gt_from_pmat(pmat, correct_for_n = FALSE)
+  # one interval: no off-diagonal elements, all G statistics are zero
+  expect_equal(nrow(result), 1)
+  expect_equal(result$gt_bnc, 0)
+  expect_equal(result$gt_bnc_abs, 0)
+  expect_true(all(result$sum_var_bc > 0))
+  # n must be supplied for every time point
+  expect_error(gt_from_pmat(pmat, n = 10), "length\\(n\\) == ncol\\(pmat\\)")
+  # a fixated initial generation gives a zero heterozygosity divisor
+  expect_error(
+    gt_from_pmat(matrix(rep(c(0, 1), 3), nrow = 3), correct_for_n = FALSE),
+    "half_het_sums > 0"
+  )
+})
+
+# ---------------------------------------------------------------------------
+# sign_permute_increments: granularity of the destructive null
+# ---------------------------------------------------------------------------
+
+test_that("sign_permute_increments window null keeps diagonal, rerolls off-diagonal", {
+  # increments within each window are +/- pairs, so every column mean stays
+  # exactly zero for any draw: the centered covariance is an exact signed
+  # rescaling of each window's sscp contribution, with no centering dust.
+  pdiff <- data.frame(d1 = c(0.10, -0.10, 0.30, -0.30),
+                      d2 = c(0.04, -0.04, -0.20, 0.20))
+  windows <- c(1, 1, 2, 2)
+  cov0 <- stats::cov(as.matrix(pdiff))
+  expect_equal(cov0[1, 2], (0.008 - 0.12) / 3)
+  out <- sign_permute_increments(pdiff, procedure = "window", windows = windows)
+  cov1 <- stats::cov(as.matrix(out))
+  s2 <- 1 # per-variant sign squares cancel, so the diagonal is exact
+  expect_equal(unname(diag(cov1)), unname(diag(cov0)))
+  # off-diagonal: [s11*s12*0.008 + s21*s22*(-0.12)] / 3 with four possible
+  # draws -- the systematic value is not systematically preserved
+  expect_true(any(abs(cov1[1, 2] - c((0.008 - 0.12) / 3, (-0.008 - 0.12) / 3,
+                                     (0.008 + 0.12) / 3, (-0.008 + 0.12) / 3))
+                  < 1e-12))
+})
+
+test_that("per-variant trajectory sign flips leave covariance structure intact", {
+  # one shared sign per variant across its intervals multiplies every sscp
+  # term by s^2 = 1, so the uncentered sum-of-squares-and-cross-products is
+  # exactly invariant and centered covariances change only through mean-shift
+  # terms. Per-(window x interval) draws are the granularity required for a
+  # destructive null; see the roxygen of sign_permute_increments().
+  pdiff <- data.frame(d1 = c(0.10, -0.10, 0.30, -0.30),
+                      d2 = c(0.04, -0.04, -0.20, 0.20))
+  s <- c(1, 1, -1, -1) # one sign per variant, shared across intervals
+  flipped <- sweep(as.matrix(pdiff), 1, s, `*`)
+  expect_equal(crossprod(flipped), crossprod(as.matrix(pdiff)))
+  # pair-aligned flips also keep column means at zero, so the centered
+  # covariance is exactly unchanged -- documenting why this granularity is a
+  # no-op rather than a null
+  expect_equal(unname(stats::cov(flipped)), unname(stats::cov(as.matrix(pdiff))))
+})

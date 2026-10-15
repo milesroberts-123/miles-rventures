@@ -750,11 +750,23 @@ arcsin_sqrt <- function(p, C = 2) {
 #' Because covariance is signed, flipping signs breaks real shared-direction
 #' structure while preserving per-element magnitudes.
 #'
+#' The `"window"` procedure draws an independent random sign for every window
+#' and time interval combination and applies it to all variants of that
+#' window: the covariance between two intervals is thereby multiplied by a
+#' freshly drawn +/-1, which destroys the systematic temporal covariance
+#' created by linked selection while preserving within-window linkage
+#' disequilibrium and covariance magnitudes. This mirrors the empirical
+#' neutral null of Buffalo and Coop (2020), who sign-permute allele frequency
+#' changes within genomic windows (PNAS supplementary material section S5).
+#' Note that one shared sign per window across all intervals at once would be
+#' a mathematical no-op, since s^2 = 1 cancels in every covariance element;
+#' drawing the sign per interval is essential for a destructive null.
+#'
 #' @param pdiff Data.frame or matrix of allele frequency changes (rows =
 #'   variants, columns = time intervals).
 #' @param procedure One of `"none"` (return input unchanged), `"window"`
-#'   (one random sign per genomic window, applied to all variants in the
-#'   window), `"cell"` (one random sign per matrix entry), or `"genome"`
+#'   (one random sign per window and interval, applied to all variants in
+#'   the window), `"cell"` (one random sign per matrix entry), or `"genome"`
 #'   (one random sign per column). Invalid values raise an error.
 #' @param windows Numeric or character vector of window IDs, one per row of
 #'   `pdiff`; required when `procedure = "window"`.
@@ -1150,7 +1162,9 @@ gt_from_covmat <- function(covmat) {
   sums_abs_cov[1] <- 0
   sums_pos_cov[1] <- 0
   sums_neg_cov[1] <- 0
-  for (j in 2:nrow(covmat)) {
+  # seq_len()[ -1 ] instead of 2:nrow(): the latter is c(2, 1) for a 1x1
+  # covariance matrix and would overwrite the sums with a bogus second row
+  for (j in seq_len(nrow(covmat))[-1]) {
     cov_sub <- covariances[1:(((j - 1) * (j)) / 2)]
 
     sum_abs_cov <- 2 * sum(abs(cov_sub), na.rm = TRUE)
@@ -1177,6 +1191,73 @@ gt_from_covmat <- function(covmat) {
     sum_var = sums_var,
     ratio = sums_pos_cov / (sums_pos_cov + sums_neg_cov)
   )
+  return(result)
+}
+
+#' G statistics with Buffalo-Coop-canonical variance denominator
+#'
+#' Derives G-style ratios from an allele frequency matrix using both
+#' denominator conventions: the `gt_from_covmat()` construction, where the
+#' cumulative variance is built up from heterozygosity-standardized diagonal
+#' entries, and the Buffalo and Coop (2020) construction, where the raw
+#' cumulative variance `Var(p_t - p_0)` (optionally sample-size corrected) is
+#' divided once by the summed half heterozygosity of the initial generation,
+#' matching the cumulative G(t) of cvtk's `total_variance()` and `calc_G()`.
+#' The B&C-canonical columns `gt_bnc` and `gt_bnc_abs` use the standardized
+#' off-diagonal covariances in the numerator and this single-adjustment
+#' denominator in the denominator; because the denominator keeps signed
+#' cross-terms, both can leave [0, 1] when covariances are negative, unlike
+#' the bounded `gt` variants.
+#'
+#' @param pmat Numeric matrix of allele frequencies; the first column is the
+#'   initial generation and time points ascend left to right. Data frames and
+#'   tibbles are coerced to matrices.
+#' @param n Optional numeric vector of sample sizes (number of chromosomes,
+#'   i.e. gene copies) sampled per time point. Must have one entry per time
+#'   point (i.e., `ncol(pmat)`) when supplied, and all entries must be at
+#'   least 2. Passed to [covmat_from_pmat()], and its first entry gives the
+#'   `n / (n - 1)` bias correction of the time-zero heterozygosity divisor,
+#'   matching the correction applied by [standard_cov_by_het()].
+#' @param correct_for_n Boolean; whether to correct variances and covariances
+#'   for finite sample size.
+#'
+#' @return A data.frame with one row per time point, as in [gt_from_covmat()],
+#'   with three additional columns: `sum_var_bc` (the B&C-canonical
+#'   standardized cumulative variance) and the ratios `gt_bnc` and
+#'   `gt_bnc_abs`.
+#' @export
+#'
+#' @examples
+#' set.seed(1)
+#' pmat <- matrix(runif(15), nrow = 5, ncol = 3)
+#' gt_from_pmat(pmat, correct_for_n = FALSE)
+gt_from_pmat <- function(pmat, n = NULL, correct_for_n = TRUE) {
+  pmat <- as.matrix(pmat)
+  if (!is.null(n)) {
+    stopifnot(length(n) == ncol(pmat), all(n >= 2))
+  }
+  covmat <- covmat_from_pmat(pmat, n = n, correct_for_n = correct_for_n,
+                             standard_by_het = TRUE)
+  covmat_raw <- covmat_from_pmat(pmat, n = n, correct_for_n = correct_for_n,
+                                 standard_by_het = FALSE)
+  # B&C-canonical denominator: the raw cumulative variance (which decomposes
+  # exactly into the top-left rolling sum of the covariance matrix) divided
+  # once by the summed half heterozygosity of the initial generation
+  half_het_sum_0 <- if (!is.null(n)) {
+    0.5 * sum_of_het(pmat[, 1]) * n[1] / (n[1] - 1)
+  } else {
+    0.5 * sum_of_het(pmat[, 1])
+  }
+  stopifnot(half_het_sum_0 > 0)
+  sums_var_bc <- rolling_matrix_sum(covmat_raw) / half_het_sum_0
+  # strict off-diagonal sums of the top-left squares of the (standardized)
+  # covariance matrix, i.e. cvtk calc_G's numerator
+  sums_offdiag_bnc <- rolling_matrix_sum(covmat) - cumsum(diag(covmat))
+  sums_offdiag_abs_bnc <- rolling_matrix_sum(abs(covmat)) - cumsum(diag(covmat))
+  result <- gt_from_covmat(covmat)
+  result$sum_var_bc <- sums_var_bc
+  result$gt_bnc <- sums_offdiag_bnc / sums_var_bc
+  result$gt_bnc_abs <- sums_offdiag_abs_bnc / sums_var_bc
   return(result)
 }
 
