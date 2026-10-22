@@ -259,3 +259,211 @@ train_abc <- function(train_sample, val_sample, outcomes, summary_stats, tol, me
     )
   )
 }
+
+# ---------------------------------------------------------------------------
+# Block bootstrap
+# ---------------------------------------------------------------------------
+
+# Internal: one block-resampled copy of `data`. Rows are never shuffled
+# freely; whole blocks are concatenated so serially correlated observations
+# (e.g., adjacent genomic windows) move together.
+resample_windows <- function(data, block_length = NULL, block_col = NULL,
+                             scaffold_col = NULL) {
+  n <- nrow(data)
+
+  # Cluster bootstrap: resample whole groups (block ids) with replacement.
+  if (!is.null(block_col)) {
+    rows_by_id <- split(seq_len(n), data[[block_col]], drop = TRUE)
+    picked <- sample(names(rows_by_id), length(rows_by_id), replace = TRUE)
+    idx <- unlist(rows_by_id[picked], use.names = FALSE)
+    return(data[idx, , drop = FALSE])
+  }
+
+  # Circular moving-block bootstrap, one circular series per scaffold.
+  if (!is.null(scaffold_col)) {
+    keys <- factor(data[[scaffold_col]], levels = unique(data[[scaffold_col]]))
+    idx <- unlist(lapply(split(seq_len(n), keys, drop = TRUE), function(rows) {
+      ng <- length(rows)
+      lg <- min(block_length, ng)
+      starts <- sample.int(ng, ceiling(ng / lg), replace = TRUE)
+      blocks <- unlist(
+        lapply(starts, function(st) ((st:(st + lg - 1) - 1) %% ng) + 1)
+      )
+      rows[blocks[seq_len(ng)]]
+    }), use.names = FALSE)
+    return(data[idx, , drop = FALSE])
+  }
+
+  # Single circular series: wrap-around blocks over row order.
+  starts <- sample.int(n, ceiling(n / block_length), replace = TRUE)
+  idx <- unlist(
+    lapply(starts, function(st) ((st:(st + block_length - 1) - 1) %% n) + 1)
+  )
+  data[idx[seq_len(n)], , drop = FALSE]
+}
+
+#' Block bootstrap confidence intervals for linear model coefficients
+#'
+#' Estimates confidence intervals for the coefficients of a linear model via
+#' block bootstrapping, designed for data whose rows are serially correlated —
+#' e.g., genomic windows, where adjacent windows share recombination history.
+#' Resampling whole blocks keeps the correlation structure intact, giving more
+#' accurate interval estimates than ordinary case (row-wise) resampling.
+#'
+#' Two blocking schemes are supported (exactly one of `block_length` or
+#' `block_col` must be supplied):
+#'
+#' - **Positional circular moving blocks** (`block_length`): each replicate
+#'   draws `ceiling(n / L)` block starts uniformly and wraps around the end of
+#'   the series (row *n* rejoins row 1), truncating to *n* rows so each
+#'   replicate matches the original sample size. If `scaffold_col` is given,
+#'   each scaffold is treated as its own circular series: block wrap-around
+#'   never crosses scaffold boundaries and every replicate keeps each
+#'   scaffold's original window count. Scaffolds shorter than `block_length`
+#'   are resampled as a single whole-scaffold block. Without `scaffold_col`
+#'   the whole data set is assumed to be one ordered sequence — the caller is
+#'   responsible for row order (see `order_by`).
+#' - **Cluster blocks** (`block_col`): the unique values of this column
+#'   (e.g., chromosome chunk ids) are resampled with replacement and all rows
+#'   of a sampled id stay together.
+#'
+#' Coefficients are estimated on each resampled data set with
+#' \code{\link[stats]{lm}}; intervals are computed per coefficient with
+#' \code{\link[boot]{boot.ci}} (default `type = "basic"`, matching the
+#' reverse-percentile interval in the `boot` package's vignette workflows).
+#' The raw \code{\link[boot]{boot}} object is attached as attribute
+#' `"boot_out"` for further interval types or diagnostics.
+#'
+#' @param data A data frame of observations (e.g., genome windows).
+#' @param formula A linear model formula passed to \code{\link[stats]{lm}}.
+#' @param R Number of bootstrap replicates (default 1000).
+#' @param block_length Block length in rows (windows) for the positional
+#'   circular moving-block bootstrap. Must be a positive integer smaller than
+#'   `nrow(data)` when `scaffold_col` is not used.
+#' @param block_col Name of the column whose unique values define the
+#'   resampling units in cluster mode.
+#' @param order_by Optional name of a column used to sort rows (within each
+#'   scaffold, when `scaffold_col` is given) before positional blocking, e.g.,
+#'   a window midpoint. Ignored in cluster mode.
+#' @param scaffold_col Optional name of the column identifying the
+#'   scaffold/chromosome each row belongs to; required with `block_length`
+#'   when rows span multiple sequences. Ignored in cluster mode.
+#' @param conf Confidence level (default 0.95).
+#' @param type Interval type passed to \code{\link[boot]{boot.ci}}:
+#'   `"basic"` (default), `"perc"`, `"norm"`, or `"bca"`.
+#' @param seed Optional integer seed for reproducibility. When `NULL`, the
+#'   caller's random state (e.g., a preceding \code{\link[base]{set.seed}})
+#'   is used.
+#'
+#' @return A data frame with one row per model coefficient: `Term`,
+#'   `Estimate`, `Lower_CI`, `Upper_CI`. The raw
+#'   \code{\link[boot]{boot}} object is attached as attribute `"boot_out"`.
+#'
+#' @examples
+#' set.seed(42)
+#' windows <- data.frame(
+#'   pooled_theta_pi = rnorm(120),
+#'   cds_density     = rnorm(120),
+#'   mean_r2_direct  = rnorm(120),
+#'   window_midpoint = rep(seq_len(40), times = 3),
+#'   scaffold        = rep(paste0("chr", 1:3), each = 40)
+#' )
+#' \donttest{
+#' block_bootstrap_lm(
+#'   windows,
+#'   pooled_theta_pi ~ cds_density + mean_r2_direct,
+#'   R = 500, block_length = 4,
+#'   scaffold_col = "scaffold", order_by = "window_midpoint",
+#'   seed = 123
+#' )
+#' }
+#' @export
+block_bootstrap_lm <- function(data, formula, R = 1000, block_length = NULL,
+                               block_col = NULL, order_by = NULL,
+                               scaffold_col = NULL, conf = 0.95,
+                               type = "basic", seed = NULL) {
+
+  if (!is.data.frame(data) || nrow(data) < 1L) {
+    stop("data must be a non-empty data frame.")
+  }
+  n <- nrow(data)
+
+  if (is.null(block_length) == is.null(block_col)) {
+    stop("Exactly one of block_length or block_col must be supplied.")
+  }
+  if (!is.null(block_length)) {
+    if (!is.numeric(block_length) || length(block_length) != 1L ||
+        is.na(block_length) || block_length < 1L ||
+        block_length != floor(block_length)) {
+      stop("block_length must be a positive integer.")
+    }
+    if (is.null(scaffold_col) && block_length >= n) {
+      stop("block_length must be smaller than the number of rows.")
+    }
+  }
+  if (!is.character(type) || length(type) != 1L || is.na(type)) {
+    stop("type must be a single character string.")
+  }
+  if (!is.numeric(R) || length(R) != 1L || is.na(R) || R < 1L ||
+      R != floor(R)) {
+    stop("R must be a positive integer.")
+  }
+
+  if (is.null(block_col)) {
+    # Positional mode: put rows into blocking order up front; the resampler
+    # relies on that order.
+    if (!is.null(scaffold_col) && !scaffold_col %in% names(data)) {
+      stop("scaffold_col is not a column of data.")
+    }
+    if (!is.null(order_by) && !order_by %in% names(data)) {
+      stop("order_by is not a column of data.")
+    }
+    sort_keys <- c(scaffold_col, order_by)
+    if (length(sort_keys) > 0L) {
+      data <- data[do.call(order, data[sort_keys]), , drop = FALSE]
+    }
+  } else {
+    if (!block_col %in% names(data)) {
+      stop("block_col is not a column of data.")
+    }
+  }
+
+  ran_gen <- function(original, mle) {
+    resample_windows(
+      original,
+      block_length = block_length,
+      block_col = block_col,
+      scaffold_col = scaffold_col
+    )
+  }
+  statistic <- function(dat, ...) stats::coef(stats::lm(formula, data = dat))
+
+  if (!is.null(seed)) set.seed(seed)
+  boot_out <- boot::boot(
+    data,
+    statistic = statistic,
+    R = R,
+    sim = "parametric",
+    ran.gen = ran_gen,
+    mle = NULL
+  )
+
+  coefs <- boot_out$t0
+  bounds <- t(vapply(seq_along(coefs), function(i) {
+    ci <- boot::boot.ci(boot_out, conf = conf, type = type, index = i)
+    if (identical(type, "norm")) {
+      ci$normal[c(2, 3)]
+    } else {
+      ci[[type]][c(4, 5)]
+    }
+  }, numeric(2)))
+
+  out <- data.frame(
+    Term = names(coefs),
+    Estimate = as.numeric(coefs),
+    Lower_CI = as.numeric(bounds[, 1]),
+    Upper_CI = as.numeric(bounds[, 2])
+  )
+  attr(out, "boot_out") <- boot_out
+  out
+}

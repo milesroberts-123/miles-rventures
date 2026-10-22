@@ -87,6 +87,7 @@ library(rventures)
 - `corr_ci_autocorr()` — Pearson correlation CI adjusted for AR(1) autocorrelation
 - `lm_sim()`, `multicol_sim()` — linear-model simulations
 - `train_abc()` — ABC cross-validation: predict each validation simulation from training simulations via `abc` (requires the suggested `abc` package)
+- `block_bootstrap_lm()` — block-bootstrap CIs for `lm` coefficients on serially correlated rows (e.g., genome windows): circular moving blocks per scaffold (`block_length`, `scaffold_col`) or cluster resampling by group id (`block_col`); returns a tidy `Term`/`Estimate`/`Lower_CI`/`Upper_CI` table with the raw `boot` object attached
 
 ### Population genetics
 

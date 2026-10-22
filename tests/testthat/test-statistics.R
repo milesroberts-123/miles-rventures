@@ -160,3 +160,152 @@ test_that("conv_cor_wn_env returns negative numerator for negatively correlated 
 test_that("conv_cor_wn_env requires matrix input with ncol > 1 and nrow > 1", {
   expect_error(conv_cor_wn_env(c(1, 2, 3)))
 })
+
+# ---------------------------------------------------------------------------
+# block_bootstrap_lm
+# ---------------------------------------------------------------------------
+
+test_that("block_bootstrap_lm returns a tidy table matching the full-data fit", {
+  set.seed(2)
+  windows <- data.frame(
+    y = rnorm(120), x1 = rnorm(120), x2 = rnorm(120),
+    midpoint = seq_len(120)
+  )
+  out <- block_bootstrap_lm(
+    windows, y ~ x1 + x2, R = 300, block_length = 10, seed = 7
+  )
+  expect_s3_class(out, "data.frame")
+  expect_named(out, c("Term", "Estimate", "Lower_CI", "Upper_CI"))
+  expected <- stats::coef(stats::lm(y ~ x1 + x2, windows))
+  expect_equal(out$Term, names(expected))
+  expect_equal(out$Estimate, unname(expected))
+  expect_true(all(out$Lower_CI < out$Upper_CI))
+  expect_s3_class(attr(out, "boot_out"), "boot")
+})
+
+test_that("block_bootstrap_lm is reproducible with a fixed seed", {
+  set.seed(2)
+  windows <- data.frame(y = rnorm(80), x = rnorm(80), midpoint = seq_len(80))
+  args <- list(windows, y ~ x, R = 200, block_length = 8)
+  a <- do.call(block_bootstrap_lm, c(args, seed = 123))
+  b <- do.call(block_bootstrap_lm, c(args, seed = 123))
+  attr(a, "boot_out") <- NULL
+  attr(b, "boot_out") <- NULL
+  expect_identical(a, b)
+
+  set.seed(50)
+  c1 <- block_bootstrap_lm(windows, y ~ x, R = 200, block_length = 8)
+  set.seed(50)
+  c2 <- block_bootstrap_lm(windows, y ~ x, R = 200, block_length = 8)
+  attr(c1, "boot_out") <- NULL
+  attr(c2, "boot_out") <- NULL
+  expect_identical(c1, c2)
+})
+
+test_that("block_bootstrap_lm CI excludes zero for a strong effect", {
+  set.seed(4)
+  n <- 60
+  x <- rnorm(n)
+  windows <- data.frame(y = 3 * x + rnorm(n, sd = 0.5), x = x, midpoint = seq_len(n))
+  out <- block_bootstrap_lm(windows, y ~ x, R = 500, block_length = 5, seed = 9)
+  slope <- out[out$Term == "x", ]
+  expect_true(slope$Lower_CI > 0 || slope$Upper_CI < 0)
+})
+
+test_that("block_bootstrap_lm supports the norm interval type", {
+  set.seed(3)
+  windows <- data.frame(y = rnorm(60), x = rnorm(60), midpoint = seq_len(60))
+  out <- block_bootstrap_lm(
+    windows, y ~ x, R = 300, block_length = 6, type = "norm", seed = 21
+  )
+  expect_true(all(out$Lower_CI < out$Upper_CI))
+})
+
+test_that("positional blocks never cross scaffold boundaries and counts hold", {
+  set.seed(5)
+  windows <- data.frame(
+    y = rnorm(60), x = rnorm(60),
+    scaffold = rep(paste0("chr", 1:3), each = 20)
+  )
+  resamp <- rventures:::resample_windows(
+    windows, block_length = 8, scaffold_col = "scaffold"
+  )
+  runs <- rle(as.character(resamp$scaffold))
+  expect_equal(runs$values, c("chr1", "chr2", "chr3"))
+  expect_equal(runs$lengths, c(20, 20, 20))
+
+  short <- data.frame(
+    y = rnorm(13), x = rnorm(13),
+    scaffold = rep(c("a", "b"), c(3, 10))
+  )
+  resamp_short <- rventures:::resample_windows(
+    short, block_length = 5, scaffold_col = "scaffold"
+  )
+  expect_equal(
+    rle(as.character(resamp_short$scaffold))$lengths, c(3, 10)
+  )
+})
+
+test_that("cluster mode keeps rows of a block id together", {
+  set.seed(6)
+  windows <- data.frame(
+    y = rnorm(40), x = rnorm(40),
+    block = rep(c("a", "b", "c", "d"), each = 10)
+  )
+  resamp <- rventures:::resample_windows(windows, block_col = "block")
+  expect_equal(nrow(resamp), 40)
+  expect_true(all(table(resamp$block) %in% c(0, 10, 20, 30, 40)))
+
+  out <- block_bootstrap_lm(windows, y ~ x, R = 200, block_col = "block", seed = 11)
+  expect_equal(out$Estimate, unname(stats::coef(stats::lm(y ~ x, windows))))
+})
+
+test_that("order_by sorts windows within scaffolds before blocking", {
+  set.seed(8)
+  windows <- data.frame(
+    y = rnorm(60), x = rnorm(60),
+    scaffold = rep(c("chr1", "chr2"), each = 30),
+    midpoint = c(30:1, 1:30)
+  )
+  sorted <- windows[order(windows$scaffold, windows$midpoint), ]
+  a <- block_bootstrap_lm(
+    windows, y ~ x, R = 100, block_length = 4,
+    scaffold_col = "scaffold", order_by = "midpoint", seed = 3
+  )
+  b <- block_bootstrap_lm(
+    sorted, y ~ x, R = 100, block_length = 4,
+    scaffold_col = "scaffold", order_by = "midpoint", seed = 3
+  )
+  expect_identical(a$Lower_CI, b$Lower_CI)
+  expect_identical(a$Upper_CI, b$Upper_CI)
+})
+
+test_that("block_bootstrap_lm validates its arguments", {
+  windows <- data.frame(
+    y = rnorm(20), x = rnorm(20), s = rep(c("a", "b"), each = 10)
+  )
+  expect_error(block_bootstrap_lm(windows, y ~ x), "Exactly one of block_length")
+  expect_error(
+    block_bootstrap_lm(windows, y ~ x, block_length = 5, block_col = "s"),
+    "Exactly one of block_length"
+  )
+  expect_error(block_bootstrap_lm(windows, y ~ x, block_length = 0), "positive integer")
+  expect_error(block_bootstrap_lm(windows, y ~ x, block_length = 5.5), "positive integer")
+  expect_error(
+    block_bootstrap_lm(windows, y ~ x, block_length = 20),
+    "smaller than the number of rows"
+  )
+  expect_error(block_bootstrap_lm(windows, y ~ x, block_col = "nope"), "not a column")
+  expect_error(
+    block_bootstrap_lm(windows, y ~ x, block_length = 5, scaffold_col = "nope"),
+    "not a column"
+  )
+  expect_error(
+    block_bootstrap_lm(windows, y ~ x, block_length = 5, R = 0),
+    "R must be a positive integer"
+  )
+  expect_error(
+    block_bootstrap_lm(windows, y ~ x, block_length = 5, type = c("basic", "perc")),
+    "type must be a single character string"
+  )
+})
