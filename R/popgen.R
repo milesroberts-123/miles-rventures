@@ -1292,7 +1292,9 @@ gt_from_pmat <- function(pmat, n = NULL, correct_for_n = TRUE,
   } else {
     0.5 * sum_of_het(pmat[, 1])
   }
-  stopifnot(half_het_sum_0 > 0)
+  if (half_het_sum_0 <= 0) {
+    stop("gt is undefined: total heterozygosity in the initial generation is zero (fixated initial state).")
+  }
   sums_var_bc <- rolling_matrix_sum(covmat_raw) / half_het_sum_0
   n_het <- if (is.null(n)) NULL else n[-length(n)]
   covmat <- standard_cov_by_het(pmat[, -ncol(pmat), drop = FALSE], covmat_raw,

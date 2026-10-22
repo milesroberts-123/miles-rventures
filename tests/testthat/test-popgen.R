@@ -1762,7 +1762,7 @@ test_that("gt_from_pmat single interval and n validation", {
   # a fixated initial generation gives a zero heterozygosity divisor
   expect_error(
     gt_from_pmat(matrix(rep(c(0, 1), 3), nrow = 3), correct_for_n = FALSE),
-    "half_het_sums > 0"
+    "fixated initial state"
   )
 })
 
