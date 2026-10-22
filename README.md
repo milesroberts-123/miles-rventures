@@ -81,6 +81,7 @@ library(rventures)
 - `plot_paf_dotplot()` — dotplot of aligned feature (PAF) coordinates, query vs. target
 - `plot_var_cov_matrix()` — upper-triangle heatmap of a variance-covariance matrix
 - `plot_predictions_truth_scatter()` — predictions vs. truth scatter with identity line, fit, and correlation stats
+- `plot_effect_sizes()` — horizontal effect-size bars for a `Term`/`Estimate`/`Lower_CI`/`Upper_CI` table (e.g., `block_bootstrap_lm` output), intercept dropped by default
 
 ### Statistics
 

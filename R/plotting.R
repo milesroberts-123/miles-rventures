@@ -651,3 +651,76 @@ plot_pairs_heatmap <- function(melted_cormat,
 
   invisible(plot_cor)
 }
+
+# ---------------------------------------------------------------------------
+# Effect sizes
+# ---------------------------------------------------------------------------
+
+#' Plot effect-size point estimates with block-bootstrap intervals
+#'
+#' Plots a coefficient table — e.g., the tidy output of
+#' \code{\link{block_bootstrap_lm}} — as horizontal effect-size bars: thick
+#' intervals for each model term, point estimates on top, and a dashed line
+#' marking zero. Terms are drawn in table order with the intercept removed by
+#' default.
+#'
+#' @param ci_table Data frame with columns `Term`, `Estimate`, `Lower_CI`,
+#'   `Upper_CI` (as returned by \code{\link{block_bootstrap_lm}}).
+#' @param drop_intercept Logical; remove intercept rows so effect sizes
+#'   compare slopes. Rows named `Intercept` or `(Intercept)` are dropped
+#'   (default TRUE).
+#' @param text_size Base text size (default 20).
+#' @param ci_color Color of the interval bars (default "red").
+#' @param ci_width Width of the interval bars in linewidth units (default 3).
+#' @param point_color Color of the point estimates (default "black").
+#' @param point_size Size of the point estimates (default 3).
+#' @param title Plot title (default none).
+#'
+#' @return The ggplot object (invisibly printed when called at top level).
+#' @examples
+#' \donttest{
+#' set.seed(42)
+#' windows <- data.frame(
+#'   pooled_theta_pi = rnorm(150),
+#'   cds_density     = rnorm(150),
+#'   mean_r2_direct  = rnorm(150)
+#' )
+#' ci_table <- block_bootstrap_lm(
+#'   windows, pooled_theta_pi ~ cds_density + mean_r2_direct,
+#'   R = 500, block_length = 5, seed = 123
+#' )
+#' plot_effect_sizes(ci_table, title = "pi ~ Mean R2 + CDS density")
+#' }
+#' @export
+plot_effect_sizes <- function(ci_table, drop_intercept = TRUE, text_size = 20,
+                              ci_color = "red", ci_width = 3,
+                              point_color = "black", point_size = 3,
+                              title = NULL) {
+
+  if (!is.data.frame(ci_table)) {
+    stop("ci_table must be a data frame.")
+  }
+  required <- c("Term", "Estimate", "Lower_CI", "Upper_CI")
+  missing_cols <- setdiff(required, names(ci_table))
+  if (length(missing_cols) > 0) {
+    stop("ci_table is missing required columns: ",
+         paste0(missing_cols, collapse = ", "))
+  }
+  if (drop_intercept) {
+    ci_table <- ci_table[!ci_table$Term %in% c("Intercept", "(Intercept)"), ,
+                         drop = FALSE]
+  }
+  if (nrow(ci_table) == 0) {
+    stop("no rows remain in ci_table after intercept removal.")
+  }
+
+  ggplot2::ggplot(ci_table, ggplot2::aes(x = Term, y = Estimate)) +
+    ggplot2::geom_linerange(ggplot2::aes(ymin = Lower_CI, ymax = Upper_CI),
+                            color = ci_color, linewidth = ci_width) +
+    ggplot2::geom_point(shape = 16, color = point_color, size = point_size) +
+    ggplot2::geom_hline(yintercept = 0, lty = 2) +
+    ggplot2::coord_flip() +
+    ggplot2::theme(text = ggplot2::element_text(size = text_size)) +
+    ggplot2::labs(y = "Block bootstrap estimate of\nscaled coefficient",
+                  x = "Model term", title = title)
+}

@@ -327,3 +327,52 @@ test_that("plot_var_cov_matrix switches variants correctly", {
   rownames(bad_names) <- c("a", "b", "c")
   expect_error(plot_var_cov_matrix(bad_names), "identical row and column names")
 })
+
+# ---------------------------------------------------------------------------
+# plot_effect_sizes
+# ---------------------------------------------------------------------------
+
+test_that("plot_effect_sizes builds an effect-size plot with intercept dropped", {
+  ci <- data.frame(
+    Term = c("(Intercept)", "cds_density", "mean_r2_direct"),
+    Estimate = c(0.5, -1.2, 0.8),
+    Lower_CI = c(0.1, -1.8, 0.2),
+    Upper_CI = c(0.9, -0.6, 1.4)
+  )
+  p <- plot_effect_sizes(ci)
+  expect_s3_class(p, "ggplot")
+  expect_false(any(grepl("[Ii]ntercept", p$data$Term)))
+  expect_equal(nrow(p$data), 2)
+  expect_equal(p$labels$y, "Block bootstrap estimate of\nscaled coefficient")
+  expect_equal(p$labels$x, "Model term")
+  expect_null(p$labels$title)
+})
+
+test_that("plot_effect_sizes keeps the intercept when asked and accepts a title", {
+  ci <- data.frame(
+    Term = c("Intercept", "x"),
+    Estimate = c(1, 2), Lower_CI = c(0.5, 1), Upper_CI = c(1.5, 3)
+  )
+  p <- plot_effect_sizes(ci, drop_intercept = FALSE, title = "model")
+  expect_equal(nrow(p$data), 2)
+  expect_equal(p$labels$title, "model")
+  # styling arguments reach the built layers
+  build <- ggplot2::ggplot_build(p)
+  expect_equal(unique(build$data[[1]]$colour), "red")
+  expect_equal(unique(build$data[[1]]$linewidth), 3)
+  expect_equal(unique(build$data[[2]]$size), 3)
+  expect_equal(unique(build$data[[2]]$colour), "black")
+})
+
+test_that("plot_effect_sizes validates its input", {
+  ci <- data.frame(
+    Term = "x", Estimate = 2, Lower_CI = 1, Upper_CI = 3
+  )
+  expect_error(plot_effect_sizes(ci[, 1:3]), "missing required columns")
+  expect_error(
+    plot_effect_sizes(
+      data.frame(Term = "(Intercept)", Estimate = 1, Lower_CI = 0, Upper_CI = 2)
+    ),
+    "no rows remain"
+  )
+})
