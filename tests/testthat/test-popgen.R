@@ -1054,13 +1054,13 @@ test_that("g_prime accepts tibbles like matrices", {
   expect_false(anyNA(g_tb))
 })
 
-test_that("covmat_pop_pair computes mean standardized between-pop covariance", {
+test_that("conv_cor_bw_pop computes mean standardized between-pop covariance", {
   set.seed(1)
   L <- 10
   gen0 <- runif(L, 0.3, 0.7)
   p1 <- cbind(AA_R1 = gen0 + rnorm(L, 0, 0.02), AA_R2 = gen0 + rnorm(L, 0, 0.02))
   p2 <- cbind(BB_R1 = gen0 + rnorm(L, 0, 0.02), BB_R2 = gen0 + rnorm(L, 0, 0.02))
-  val <- covmat_pop_pair(p1, p2, pop1 = "AA", pop2 = "BB", gen0 = gen0)
+  val <- conv_cor_bw_pop(p1, p2, pop1 = "AA", pop2 = "BB", gen0 = gen0)
 
   pd1 <- p1 - gen0
   pd2 <- p2 - gen0
@@ -1072,21 +1072,21 @@ test_that("covmat_pop_pair computes mean standardized between-pop covariance", {
   expect_equal(val, bw / mean_std)
 })
 
-test_that("covmat_pop_pair requires column names", {
+test_that("conv_cor_bw_pop requires column names", {
   gen0 <- c(0.5, 0.4)
   p1 <- cbind(gen0 + 0.01, gen0 - 0.01)
   p2 <- cbind(gen0 - 0.01, gen0 + 0.01)
-  expect_error(covmat_pop_pair(p1, p2, pop1 = "AA", pop2 = "BB", gen0 = gen0),
+  expect_error(conv_cor_bw_pop(p1, p2, pop1 = "AA", pop2 = "BB", gen0 = gen0),
                "colnames")
 })
 
-test_that("covmat_pop_pair takes one increment per replicate from shared start", {
+test_that("conv_cor_bw_pop takes one increment per replicate from shared start", {
   set.seed(4)
   L <- 8
   gen0 <- runif(L, 0.3, 0.7)
   p1 <- cbind(AA_R1 = gen0 + runif(L, 0, 0.05), AA_R2 = gen0 - runif(L, 0, 0.05))
   p2 <- cbind(BB_R1 = gen0 - runif(L, 0, 0.05), BB_R2 = gen0 + runif(L, 0, 0.05))
-  val <- covmat_pop_pair(p1, p2, pop1 = "AA", pop2 = "BB", gen0 = gen0)
+  val <- conv_cor_bw_pop(p1, p2, pop1 = "AA", pop2 = "BB", gen0 = gen0)
   # identical to hand differencing: every column is the increment from gen0
   pd1 <- p1 - gen0
   pd2 <- p2 - gen0
@@ -1096,13 +1096,13 @@ test_that("covmat_pop_pair takes one increment per replicate from shared start",
   # single-column case matches freq_increments with the shared start
   p1_1 <- p1[, 1, drop = FALSE]
   p2_1 <- p2[, 1, drop = FALSE]
-  val_single <- covmat_pop_pair(p1_1, p2_1, pop1 = "AA", pop2 = "BB", gen0 = gen0)
+  val_single <- conv_cor_bw_pop(p1_1, p2_1, pop1 = "AA", pop2 = "BB", gen0 = gen0)
   cm_single <- stats::cov(cbind(freq_increments(p1_1, p0 = gen0),
                                 freq_increments(p2_1, p0 = gen0)))
   std_single <- mean(sqrt(diag(cm_single)[1] %o% diag(cm_single)[2]))
   expect_equal(val_single, mean(cm_single[1, 2]) / std_single)
   # tibbles coerce identically
-  val_tb <- covmat_pop_pair(
+  val_tb <- conv_cor_bw_pop(
     tibble::as_tibble(p1, .name_repair = "minimal"),
     tibble::as_tibble(p2, .name_repair = "minimal"),
     pop1 = "AA", pop2 = "BB", gen0 = gen0
@@ -1152,9 +1152,9 @@ test_that("dataset kit integrates with temporal functions end to end", {
   expect_length(g, 2)
   expect_true(all(g <= 1))
 
-  # two-population comparison via covmat_pop_pair
+  # two-population comparison via conv_cor_bw_pop
   bb <- extract_samples(d$freq_mat, d$meta, population = "BB")
-  val <- covmat_pop_pair(as.matrix(aa), as.matrix(bb),
+  val <- conv_cor_bw_pop(as.matrix(aa), as.matrix(bb),
                          pop1 = "AA", pop2 = "BB",
                          gen0 <- as.matrix(aa[, aa_meta$time_point == 0, drop = FALSE])[, 1])
   expect_type(val, "double")

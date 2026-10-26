@@ -33,7 +33,7 @@ Subsets the columns of a \code{freq_matrix} by population, time point, and/or
 replicate (using \code{\%in\%} matching against the sample metadata), rebuilds
 column names as \code{pop_time_rep}, and attaches the subset metadata as the
 attribute \code{"sample_info"}. The rebuilt names let the result feed directly
-into \code{\link[=covmat_pop_pair]{covmat_pop_pair()}} and provide replicate/time labels for
+into \code{\link[=conv_cor_bw_pop]{conv_cor_bw_pop()}} and provide replicate/time labels for
 \code{\link[=replicate_gt]{replicate_gt()}}.
 }
 \examples{

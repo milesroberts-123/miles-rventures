@@ -448,7 +448,7 @@ validate_af_dataset <- function(freq_mat, snp_coords, p0, sample_meta,
 #' replicate (using `%in%` matching against the sample metadata), rebuilds
 #' column names as `pop_time_rep`, and attaches the subset metadata as the
 #' attribute `"sample_info"`. The rebuilt names let the result feed directly
-#' into [covmat_pop_pair()] and provide replicate/time labels for
+#' into [conv_cor_bw_pop()] and provide replicate/time labels for
 #' [replicate_gt()].
 #'
 #' @param freq_mat A `freq_matrix` object.
@@ -1452,12 +1452,13 @@ replicate_gt <- function(pdiff, rep_labels, time_labels) {
   ))
 }
 
-#' Calculate covariances across a pair of environments
+#' Calculate convergence correlation between a pair of populations
 #'
 #' Computes the mean standardized covariance of allele frequency changes
-#' between two populations: the average covariance between the two sets of
-#' replicate time series, normalized by the mean pairwise product of
-#' within-population standard deviations.
+#' between two populations — the mirror of [conv_cor_wn_env()] for
+#' convergence *between* environments rather than within one: the average
+#' covariance between the two sets of replicate time series, normalized by
+#' the mean pairwise product of within-population standard deviations.
 #'
 #' @param pmat1 Numeric matrix of allele frequencies in population 1, rows =
 #'   variants, one column per replicate, each sampled at the same time point
@@ -1482,8 +1483,8 @@ replicate_gt <- function(pdiff, rep_labels, time_labels) {
 #' gen0 <- c(0.5, 0.4, 0.3)
 #' p1 <- cbind(AA_rep1 = gen0 + 0.01, AA_rep2 = gen0 - 0.01)
 #' p2 <- cbind(BB_rep1 = gen0 - 0.01, BB_rep2 = gen0 + 0.01)
-#' covmat_pop_pair(p1, p2, pop1 = "AA", pop2 = "BB", gen0 = gen0)
-covmat_pop_pair <- function(pmat1, pmat2, pop1, pop2, gen0) {
+#' conv_cor_bw_pop(p1, p2, pop1 = "AA", pop2 = "BB", gen0 = gen0)
+conv_cor_bw_pop <- function(pmat1, pmat2, pop1, pop2, gen0) {
   stopifnot(
     !is.null(colnames(pmat1)),
     !is.null(colnames(pmat2))
