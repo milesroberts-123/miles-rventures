@@ -150,7 +150,7 @@ library(rventures)
 
 ### Data wrangling helpers
 
-- `create_blocks()` — block a sorted variant table by SNP count or physical distance, never across chromosomes
+- `create_blocks()` — block a sorted variant table by SNP count, physical distance, or BED-style chrom/start/end intervals (outside variants get NA), never across chromosomes
 - `grab_sample_sizes()` — subset a sample-size table and prepend the generation-0 size
 - `find_best_poly()`, `eval_deriv()` — best-AIC raw-polynomial fit and derivative evaluation
 

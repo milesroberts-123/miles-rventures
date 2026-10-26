@@ -8,9 +8,10 @@ create_blocks(
   data,
   chrom_col_name,
   pos_col_name,
-  window_size,
+  window_size = NULL,
   sep,
-  block_by = "snp"
+  block_by = "snp",
+  intervals = NULL
 )
 }
 \arguments{
@@ -27,7 +28,20 @@ pairs per block if \code{block_by = "base"}.}
 the \code{window} label.}
 
 \item{block_by}{Either \code{"snp"} (fixed number of SNPs per block) or
-\code{"base"} (fixed physical span per block).}
+\code{"base"} (fixed physical span per block). Ignored when \code{intervals} is
+supplied.}
+
+\item{intervals}{Optional data frame defining the blocks by position, with
+columns \code{chrom}, \code{start}, and \code{end} (rename columns externally if
+needed). BED conventions apply: \code{end} is exclusive, so a variant is
+inside an interval when \verb{start <= pos < end}. Intervals are sorted and
+numbered within each chromosome (restarting the count), yielding
+\code{window = paste(chrom, block, sep)}. Intervals on the same chromosome
+must not overlap: assignment would otherwise be ambiguous. Variants in
+no interval get \code{block = NA} and \code{window = NA}, so the block column is a
+complete partition of the variant set. Overrides \code{window_size} and
+\code{block_by}. Chromosome identifiers are compared as characters (e.g.,
+integer chromosomes \code{1} do not match BED strings \code{"chr1"}).}
 }
 \value{
 \code{data} with columns \code{block} (block index within chromosome) and
@@ -41,5 +55,9 @@ SNP count or by physical distance, and never across chromosome boundaries.
 \dontrun{
 blocks <- create_blocks(snp_table, chrom, pos, 15000,
                         block_by = "snp", sep = "_")
+# partition variants over gene intervals (BED-style start/end)
+genes <- data.frame(chrom = "chr1", start = 1e6, end = 1.5e6)
+gene_blocks <- create_blocks(snp_table, chrom, pos,
+                             sep = "_", intervals = genes)
 }
 }

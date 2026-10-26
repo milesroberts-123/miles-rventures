@@ -234,6 +234,72 @@ test_that("create_blocks base mode bins by physical distance", {
   expect_equal(blocks$window, c("1_0", "1_1", "1_2", "1_3"))
 })
 
+test_that("create_blocks interval mode assigns BED half-open gene intervals", {
+  d <- data.frame(chrom = c("chr1", "chr1", "chr1", "chr2"),
+                  pos = c(100, 200, 250, 300))
+  iv <- data.frame(chrom = c("chr1", "chr1", "chr2"),
+                   start = c(100, 200, 250),
+                   end = c(200, 260, 350))
+  # pos == start is inside (BED half-open); pos == end is not
+  out <- create_blocks(d, chrom, pos, sep = "_", intervals = iv)
+  expect_equal(out$block, c(1, 2, 2, 1))
+  expect_equal(out$window, c("chr1_1", "chr1_2", "chr1_2", "chr2_1"))
+})
+
+test_that("create_blocks interval mode tolerates unordered intervals", {
+  d <- data.frame(chrom = c("chr1", "chr1", "chr2"),
+                  pos = c(150, 350, 60))
+  iv <- data.frame(chrom = c("chr2", "chr1", "chr1"),
+                   start = c(50, 300, 100),
+                   end = c(120, 400, 200))
+  out <- create_blocks(d, chrom, pos, sep = "_", intervals = iv)
+  # sorted order: chr1 [100,200) block 1, [300,400) block 2; chr2 [50,120) block 1
+  expect_equal(out$block, c(1, 2, 1))
+  expect_equal(out$window, c("chr1_1", "chr1_2", "chr2_1"))
+})
+
+test_that("create_blocks interval mode labels variants outside as NA", {
+  d <- data.frame(chrom = c("chr1", "chr1"), pos = c(50, 500))
+  iv <- data.frame(chrom = "chr1", start = 100, end = 200)
+  expect_warning(
+    out <- create_blocks(d, chrom, pos, sep = "_", intervals = iv),
+    "no variants fell inside"
+  )
+  expect_equal(out$block, c(NA_integer_, NA_integer_))
+  expect_equal(out$window, c(NA_character_, NA_character_))
+})
+
+test_that("create_blocks interval mode errors on overlapping intervals", {
+  d <- data.frame(chrom = c("chr1", "chr1"), pos = c(120, 200))
+  iv <- data.frame(chrom = "chr1", start = c(100, 150), end = c(160, 300))
+  expect_error(create_blocks(d, chrom, pos, sep = "_", intervals = iv),
+               "must not overlap")
+})
+
+test_that("create_blocks interval mode warns when nothing matches", {
+  # integer chromosomes do not match the "chr1" interval labels
+  d <- data.frame(chrom = c(1L, 1L), pos = c(120, 200))
+  iv <- data.frame(chrom = "chr1", start = 100, end = 300)
+  expect_warning(
+    out <- create_blocks(d, chrom, pos, sep = "_", intervals = iv),
+    "no variants fell inside"
+  )
+  expect_equal(out$block, c(NA_integer_, NA_integer_))
+})
+
+test_that("create_blocks requires exactly one of window_size or intervals", {
+  d <- data.frame(chrom = c("chr1"), pos = c(10))
+  iv <- data.frame(chrom = "chr1", start = 1, end = 100)
+  expect_error(
+    create_blocks(d, chrom, pos, window_size = 2, sep = "_", intervals = iv),
+    "not both"
+  )
+  expect_error(create_blocks(d, chrom, pos, sep = "_"),
+               "Pass either window_size or intervals")
+  expect_error(create_blocks(d, chrom, pos, sep = "_", intervals = iv[, 1:2]),
+               "chrom, start, and end")
+})
+
 test_that("create_blocks errors on unsorted positions within chromosome", {
   d <- data.frame(chrom = c(1, 1),
                   pos = c(20, 10))

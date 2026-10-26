@@ -242,7 +242,19 @@ csv_to_parquet <- function(csv_path, parquet_dir,
 #' @param sep Separator pasted between chromosome and block index to form
 #'   the `window` label.
 #' @param block_by Either `"snp"` (fixed number of SNPs per block) or
-#'   `"base"` (fixed physical span per block).
+#'   `"base"` (fixed physical span per block). Ignored when `intervals` is
+#'   supplied.
+#' @param intervals Optional data frame defining the blocks by position, with
+#'   columns `chrom`, `start`, and `end` (rename columns externally if
+#'   needed). BED conventions apply: `end` is exclusive, so a variant is
+#'   inside an interval when `start <= pos < end`. Intervals are sorted and
+#'   numbered within each chromosome (restarting the count), yielding
+#'   `window = paste(chrom, block, sep)`. Intervals on the same chromosome
+#'   must not overlap: assignment would otherwise be ambiguous. Variants in
+#'   no interval get `block = NA` and `window = NA`, so the block column is a
+#'   complete partition of the variant set. Overrides `window_size` and
+#'   `block_by`. Chromosome identifiers are compared as characters (e.g.,
+#'   integer chromosomes `1` do not match BED strings `"chr1"`).
 #'
 #' @return `data` with columns `block` (block index within chromosome) and
 #'   `window` (chromosome-sep-block label).
@@ -252,13 +264,18 @@ csv_to_parquet <- function(csv_path, parquet_dir,
 #' \dontrun{
 #' blocks <- create_blocks(snp_table, chrom, pos, 15000,
 #'                         block_by = "snp", sep = "_")
+#' # partition variants over gene intervals (BED-style start/end)
+#' genes <- data.frame(chrom = "chr1", start = 1e6, end = 1.5e6)
+#' gene_blocks <- create_blocks(snp_table, chrom, pos,
+#'                              sep = "_", intervals = genes)
 #' }
 create_blocks <- function(data,
                           chrom_col_name,
                           pos_col_name,
-                          window_size,
+                          window_size = NULL,
                           sep,
-                          block_by = "snp") {
+                          block_by = "snp",
+                          intervals = NULL) {
   # check data is sorted
   sort_check <- data %>%
     dplyr::group_by({{ chrom_col_name }}) %>%
@@ -266,6 +283,74 @@ create_blocks <- function(data,
 
   if (!all(sort_check$is_sorted)) {
     stop("Input data should be sorted by position within chromosome.")
+  }
+
+  if (!is.null(intervals)) {
+    if (!is.null(window_size)) {
+      stop("Pass either window_size or intervals, not both.")
+    }
+    if (!is.data.frame(intervals) ||
+        !all(c("chrom", "start", "end") %in% names(intervals))) {
+      stop("intervals must be a data frame with chrom, start, and end columns.")
+    }
+    iv <- intervals[, c("chrom", "start", "end"), drop = FALSE]
+    iv$chrom <- as.character(iv$chrom)
+    iv$start <- as.numeric(iv$start)
+    iv$end <- as.numeric(iv$end)
+    if (anyNA(iv)) {
+      stop("intervals must not contain NA values.")
+    }
+    iv <- iv[order(iv$chrom, iv$start, iv$end), , drop = FALSE]
+    # overlaps within a chromosome would make assignment ambiguous
+    if (nrow(iv) > 1) {
+      same_chrom <- iv$chrom[-1] == iv$chrom[-nrow(iv)]
+      overlapping <- (iv$start[-1] < iv$end[-nrow(iv)]) & same_chrom
+      if (any(overlapping)) {
+        j <- which(overlapping)[1]
+        stop(sprintf(
+          paste("Intervals must not overlap for an unambiguous partition:",
+                "[%s, %s) and [%s, %s) on %s."),
+          iv$start[j], iv$end[j], iv$start[j + 1], iv$end[j + 1], iv$chrom[j]
+        ))
+      }
+    }
+    # block numbers restart per chromosome, in the sorted interval order
+    block_id <- unlist(lapply(unique(iv$chrom), function(ch) {
+      seq_len(sum(iv$chrom == ch))
+    }))
+    pos_vec <- data %>% dplyr::pull({{ pos_col_name }})
+    chrom_vec <- as.character(dplyr::pull(data, {{ chrom_col_name }}))
+    block <- rep(NA_integer_, nrow(data))
+    for (ch in unique(iv$chrom)) {
+      iv_rows <- which(iv$chrom == ch)
+      data_rows <- which(chrom_vec == ch)
+      if (length(data_rows) == 0L) {
+        next
+      }
+      # BED half-open convention: start <= pos < end
+      j <- findInterval(pos_vec[data_rows], iv$start[iv_rows])
+      in_open <- j >= 1L
+      hit <- rep(FALSE, length(data_rows))
+      hit[in_open] <- pos_vec[data_rows][in_open] < iv$end[iv_rows][j[in_open]]
+      block[data_rows[hit]] <- block_id[iv_rows][j[hit]]
+    }
+    window <- ifelse(
+      is.na(block), NA_character_, paste(chrom_vec, block, sep = sep)
+    )
+    if (all(is.na(block))) {
+      warning(paste(
+        "no variants fell inside any interval;",
+        "check that chromosome identifiers and the half-open [start, end)",
+        "convention match the variant table."
+      ))
+    }
+    blocks <- data
+    blocks$block <- block
+    blocks$window <- window
+    return(blocks)
+  }
+  if (is.null(window_size)) {
+    stop("Pass either window_size or intervals.")
   }
 
   if (block_by == "snp") {
