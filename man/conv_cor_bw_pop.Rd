@@ -32,7 +32,7 @@ covariance.
 }
 \description{
 Computes the mean standardized covariance of allele frequency changes
-between two populations — the mirror of \code{\link[=conv_cor_wn_env]{conv_cor_wn_env()}} for
+between two populations — the mirror of \code{\link[=conv_cor_wn_pop]{conv_cor_wn_pop()}} for
 convergence \emph{between} environments rather than within one: the average
 covariance between the two sets of replicate time series, normalized by
 the mean pairwise product of within-population standard deviations.

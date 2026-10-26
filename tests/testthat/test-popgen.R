@@ -986,10 +986,10 @@ test_that("replicate_gt validates labels", {
                "unique")
 })
 
-test_that("conv_cor_wn_env computes numerator and denominator", {
+test_that("conv_cor_wn_pop computes numerator and denominator", {
   set.seed(1)
   pdiff <- matrix(rnorm(40, sd = 0.05), nrow = 20, ncol = 2)
-  res <- conv_cor_wn_env(pdiff)
+  res <- conv_cor_wn_pop(pdiff)
   covmat <- stats::cov(pdiff)
   expect_length(res, 2)
   expect_equal(res[1], covmat[1, 2])
@@ -997,8 +997,8 @@ test_that("conv_cor_wn_env computes numerator and denominator", {
   expect_lte(abs(res[1]), res[2])
 })
 
-test_that("conv_cor_wn_env errors when replicates have zero variance", {
-  expect_error(conv_cor_wn_env(cbind(c(0.5, 0.5, 0.5), c(0.5, 0.5, 0.5))),
+test_that("conv_cor_wn_pop errors when replicates have zero variance", {
+  expect_error(conv_cor_wn_pop(cbind(c(0.5, 0.5, 0.5), c(0.5, 0.5, 0.5))),
                "denominator")
 })
 

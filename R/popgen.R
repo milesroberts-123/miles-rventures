@@ -1344,8 +1344,8 @@ gt_from_pmat <- function(pmat, n = NULL, correct_for_n = TRUE,
 #' @examples
 #' set.seed(1)
 #' pdiff <- matrix(rnorm(40, sd = 0.05), nrow = 20, ncol = 2)
-#' conv_cor_wn_env(pdiff)
-conv_cor_wn_env <- function(pdiff) {
+#' conv_cor_wn_pop(pdiff)
+conv_cor_wn_pop <- function(pdiff) {
   stopifnot(ncol(pdiff) > 1, nrow(pdiff) > 1)
   covmat <- stats::cov(pdiff, use = "pairwise.complete.obs")
   rep_var <- diag(covmat)
@@ -1455,7 +1455,7 @@ replicate_gt <- function(pdiff, rep_labels, time_labels) {
 #' Calculate convergence correlation between a pair of populations
 #'
 #' Computes the mean standardized covariance of allele frequency changes
-#' between two populations — the mirror of [conv_cor_wn_env()] for
+#' between two populations — the mirror of [conv_cor_wn_pop()] for
 #' convergence *between* environments rather than within one: the average
 #' covariance between the two sets of replicate time series, normalized by
 #' the mean pairwise product of within-population standard deviations.

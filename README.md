@@ -110,7 +110,7 @@ library(rventures)
 - `standard_cov_by_het()` — standardize a covariance matrix by heterozygosity
 - `g_prime()` — linked-selection G statistic corrected for selection-inflated variance
 - `gt_from_covmat()` — G ratios accumulated over nested top-left squares of a covariance matrix
-- `conv_cor_wn_env()` — convergence correlation among replicates within an environment
+- `conv_cor_wn_pop()` — convergence correlation among replicate populations within an environment (formerly `conv_cor_wn_env`)
 - `replicate_gt()` — variance/covariance partition by replicate and time labels
 - `conv_cor_bw_pop()` — convergence correlation between a pair of populations: mean standardized covariance of their replicate increments (formerly `covmat_pop_pair`)
 - `feder_t_test()` — Feder-style one-sample t-test of standardized allele-frequency changes, pooled across time points and replicates per population

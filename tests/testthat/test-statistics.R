@@ -114,51 +114,51 @@ test_that("train_abc errors when abc is not installed", {
 })
 
 # ---------------------------------------------------------------------------
-# Ported: rm_na_after_na, conv_cor_wn_env, replicate_gt extras
+# Ported: rm_na_after_na, conv_cor_wn_pop, replicate_gt extras
 # (from grenenet-phase2 resources/R/tests.R)
 # ---------------------------------------------------------------------------
 
-test_that("conv_cor_wn_env returns a length-2 vector: numerator and denominator", {
+test_that("conv_cor_wn_pop returns a length-2 vector: numerator and denominator", {
   set.seed(42)
   pdiff <- matrix(rnorm(30), nrow = 5, ncol = 6)
-  result <- conv_cor_wn_env(pdiff)
+  result <- conv_cor_wn_pop(pdiff)
   expect_equal(length(result), 2)
 })
 
-test_that("conv_cor_wn_env returns numerator smaller than denominator", {
+test_that("conv_cor_wn_pop returns numerator smaller than denominator", {
   set.seed(99)
   pdiff <- matrix(rnorm(60), nrow = 10, ncol = 6)
-  result <- conv_cor_wn_env(pdiff)
+  result <- conv_cor_wn_pop(pdiff)
   expect_true(abs(result[1]) <= result[2])
 })
 
-test_that("conv_cor_wn_env works with matrices of varying sizes", {
+test_that("conv_cor_wn_pop works with matrices of varying sizes", {
   set.seed(7)
   pdiff_4x3 <- matrix(rnorm(12), nrow = 4, ncol = 3)
-  result <- conv_cor_wn_env(pdiff_4x3)
+  result <- conv_cor_wn_pop(pdiff_4x3)
   expect_equal(length(result), 2)
 })
 
-test_that("conv_cor_wn_env returns positive numerator for positively correlated data", {
+test_that("conv_cor_wn_pop returns positive numerator for positively correlated data", {
   set.seed(123)
   a <- rnorm(10, mean = 0, sd = 1)
   b <- a + rnorm(10, mean = 0, sd = 0.1)
   pdiff <- cbind(a, b)
-  result <- conv_cor_wn_env(pdiff)
+  result <- conv_cor_wn_pop(pdiff)
   expect_true(result[1] > 0)
 })
 
-test_that("conv_cor_wn_env returns negative numerator for negatively correlated data", {
+test_that("conv_cor_wn_pop returns negative numerator for negatively correlated data", {
   set.seed(123)
   a <- rnorm(10, mean = 0, sd = 1)
   b <- -1 * a + rnorm(10, mean = 0, sd = 0.1)
   pdiff <- cbind(a, b)
-  result <- conv_cor_wn_env(pdiff)
+  result <- conv_cor_wn_pop(pdiff)
   expect_true(result[1] < 0)
 })
 
-test_that("conv_cor_wn_env requires matrix input with ncol > 1 and nrow > 1", {
-  expect_error(conv_cor_wn_env(c(1, 2, 3)))
+test_that("conv_cor_wn_pop requires matrix input with ncol > 1 and nrow > 1", {
+  expect_error(conv_cor_wn_pop(c(1, 2, 3)))
 })
 
 # ---------------------------------------------------------------------------
