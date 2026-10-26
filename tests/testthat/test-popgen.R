@@ -1080,6 +1080,54 @@ test_that("covmat_pop_pair requires column names", {
                "colnames")
 })
 
+test_that("covmat_pop_pair takes one increment per replicate from shared start", {
+  set.seed(4)
+  L <- 8
+  gen0 <- runif(L, 0.3, 0.7)
+  p1 <- cbind(AA_R1 = gen0 + runif(L, 0, 0.05), AA_R2 = gen0 - runif(L, 0, 0.05))
+  p2 <- cbind(BB_R1 = gen0 - runif(L, 0, 0.05), BB_R2 = gen0 + runif(L, 0, 0.05))
+  val <- covmat_pop_pair(p1, p2, pop1 = "AA", pop2 = "BB", gen0 = gen0)
+  # identical to hand differencing: every column is the increment from gen0
+  pd1 <- p1 - gen0
+  pd2 <- p2 - gen0
+  cm <- stats::cov(cbind(pd1, pd2))
+  mean_std <- mean(sqrt(diag(cm)[1:2] %o% diag(cm)[3:4]))
+  expect_equal(val, mean(cm[1:2, 3:4]) / mean_std)
+  # single-column case matches freq_increments with the shared start
+  p1_1 <- p1[, 1, drop = FALSE]
+  p2_1 <- p2[, 1, drop = FALSE]
+  val_single <- covmat_pop_pair(p1_1, p2_1, pop1 = "AA", pop2 = "BB", gen0 = gen0)
+  cm_single <- stats::cov(cbind(freq_increments(p1_1, p0 = gen0),
+                                freq_increments(p2_1, p0 = gen0)))
+  std_single <- mean(sqrt(diag(cm_single)[1] %o% diag(cm_single)[2]))
+  expect_equal(val_single, mean(cm_single[1, 2]) / std_single)
+  # tibbles coerce identically
+  val_tb <- covmat_pop_pair(
+    tibble::as_tibble(p1, .name_repair = "minimal"),
+    tibble::as_tibble(p2, .name_repair = "minimal"),
+    pop1 = "AA", pop2 = "BB", gen0 = gen0
+  )
+  expect_equal(val_tb, val)
+})
+
+test_that("freq_increments prepends optional interval-start frequencies", {
+  p0 <- c(0.4, 0.8, 0.6)
+  pmat <- matrix(c(0.5, 0.7, 0.9, 0.6, 0.7, 0.8), nrow = 3, ncol = 2)
+  incr <- freq_increments(pmat, p0 = p0)
+  # first increment from p0; second increment adjacent
+  expect_equal(incr[, 1], c(0.1, -0.1, 0.3))
+  expect_equal(incr[, 2], c(0.1, 0.0, -0.1))
+  # single-column pmat: exactly the change from p0
+  expect_equal(as.numeric(freq_increments(pmat[, 1, drop = FALSE], p0 = p0)),
+               c(0.1, -0.1, 0.3))
+  # equivalence with manual cbind
+  expect_equal(freq_increments(pmat, p0 = p0), freq_increments(cbind(p0, pmat)))
+  # validation
+  expect_error(freq_increments(pmat, p0 = c(0.4, 0.8)), "one entry per variant")
+  expect_error(freq_increments(pmat, p0 = c("0.4", "0.8", "0.6")),
+               "one entry per variant")
+})
+
 # ---------------------------------------------------------------------------
 # Integration: dataset kit feeding the temporal analyses
 # ---------------------------------------------------------------------------

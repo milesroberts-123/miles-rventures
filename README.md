@@ -101,7 +101,7 @@ library(rventures)
 
 ### Temporal-replicate toolkit
 
-- `freq_increments()` — allele-frequency changes between adjacent time points
+- `freq_increments()` — allele-frequency changes between adjacent time points, optionally starting from shared initial frequencies (`p0`)
 - `rm_na_after_na()` — NA-truncate a time series at its first NA
 - `arcsin_sqrt()` — variance-stabilizing arcsine-square-root transform
 - `sum_of_het()`, `geom_pairwise_mean()`, `rolling_matrix_sum()` — small matrix/vector helpers
@@ -112,7 +112,7 @@ library(rventures)
 - `gt_from_covmat()` — G ratios accumulated over nested top-left squares of a covariance matrix
 - `conv_cor_wn_env()` — convergence correlation among replicates within an environment
 - `replicate_gt()` — variance/covariance partition by replicate and time labels
-- `covmat_pop_pair()` — mean standardized covariance between a pair of populations
+- `covmat_pop_pair()` — mean standardized covariance between a pair of populations, one increment per replicate from shared interval-start frequencies
 - `feder_t_test()` — Feder-style one-sample t-test of standardized allele-frequency changes, pooled across time points and replicates per population
 - `fit_af_glm()` — quasibinomial GLM of allele frequency over time, with optional shared-baseline observation and fixed-intercept offset
 - `sum_of_het_by_t()` — summed heterozygosity per time point, with labels extracted from column names

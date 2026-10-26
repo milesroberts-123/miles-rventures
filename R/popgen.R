@@ -683,6 +683,11 @@ geom_pairwise_mean <- function(my_vector) {
 #'
 #' @param pmat Numeric matrix of allele frequencies; time points ascending
 #'   from the left column to the right column.
+#' @param p0 Optional numeric vector of allele frequencies at the start of
+#'   the interval, one per variant: prepended as an additional first column
+#'   before differencing. Use when `pmat` holds the frequencies at the
+#'   interval end (e.g., one column per replicate at the same time point)
+#'   and the shared starting frequencies are kept separately.
 #'
 #' @return A numeric matrix with the same number of rows and one fewer
 #'   column than `pmat`: the allele frequency change in each interval.
@@ -691,7 +696,15 @@ geom_pairwise_mean <- function(my_vector) {
 #' @examples
 #' pmat <- matrix(c(0.1, 0.2, 0.3, 0.4, 0.2, 0.3, 0.4, 0.5), nrow = 2, byrow = TRUE)
 #' freq_increments(pmat)
-freq_increments <- function(pmat) {
+#' freq_increments(pmat, p0 = c(0.15, 0.35))
+freq_increments <- function(pmat, p0 = NULL) {
+  pmat <- as.matrix(pmat)
+  if (!is.null(p0)) {
+    if (!is.numeric(p0) || length(p0) != nrow(pmat)) {
+      stop("p0 must be a numeric vector with one entry per variant.")
+    }
+    pmat <- cbind(p0, pmat)
+  }
   pmat[, -1, drop = FALSE] - pmat[, -ncol(pmat), drop = FALSE]
 }
 
@@ -1447,16 +1460,19 @@ replicate_gt <- function(pdiff, rep_labels, time_labels) {
 #' within-population standard deviations.
 #'
 #' @param pmat1 Numeric matrix of allele frequencies in population 1, rows =
-#'   variants, columns = replicate time series. Column names must contain
-#'   `pop1`.
+#'   variants, one column per replicate, each sampled at the same time point
+#'   (the interval end). Column names must contain `pop1`.
 #' @param pmat2 Numeric matrix of allele frequencies in population 2, same
 #'   layout as `pmat1`. Column names must contain `pop2`.
 #' @param pop1 Character string identifying population 1; used to grep the
 #'   columns of `pmat1`.
 #' @param pop2 Character string identifying population 2; used to grep the
 #'   columns of `pmat2`.
-#' @param gen0 Numeric vector of allele frequencies at generation 0, one per
-#'   variant (shared by both populations).
+#' @param gen0 Numeric vector of allele frequencies at the start of the
+#'   interval (typically generation 0), one per variant, shared by both
+#'   populations; each replicate's increment is its change from these
+#'   frequencies, equal to [freq_increments()] with `p0` for a single
+#'   column.
 #'
 #' @return A single number: the mean standardized between-population
 #'   covariance.
@@ -1472,7 +1488,11 @@ covmat_pop_pair <- function(pmat1, pmat2, pop1, pop2, gen0) {
     !is.null(colnames(pmat1)),
     !is.null(colnames(pmat2))
   )
-  # allele frequency changes between adjacent generations
+  pmat1 <- as.matrix(pmat1)
+  pmat2 <- as.matrix(pmat2)
+  # one allele frequency increment per replicate: the change from the shared
+  # interval-start frequencies gen0 (for a single column of `pmat1`, this is
+  # exactly freq_increments(pmat1, p0 = gen0))
   pdiff1 <- pmat1 - gen0
   pdiff2 <- pmat2 - gen0
 
@@ -1480,8 +1500,8 @@ covmat_pop_pair <- function(pmat1, pmat2, pop1, pop2, gen0) {
 
   # mean product of std of between population pairs
   rep_var <- diag(covmat)
-  rep_var_1 <- rep_var[1:ncol(pmat1)]
-  rep_var_2 <- rep_var[(ncol(pmat1) + 1):length(rep_var)]
+  rep_var_1 <- rep_var[1:ncol(pdiff1)]
+  rep_var_2 <- rep_var[(ncol(pdiff1) + 1):length(rep_var)]
   mean_pair_std <- mean(sqrt(rep_var_1 %o% rep_var_2))
 
   bw_pop_cov <- covmat[base::grep(pop1, rownames(covmat)),

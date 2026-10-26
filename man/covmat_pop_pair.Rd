@@ -8,8 +8,8 @@ covmat_pop_pair(pmat1, pmat2, pop1, pop2, gen0)
 }
 \arguments{
 \item{pmat1}{Numeric matrix of allele frequencies in population 1, rows =
-variants, columns = replicate time series. Column names must contain
-\code{pop1}.}
+variants, one column per replicate, each sampled at the same time point
+(the interval end). Column names must contain \code{pop1}.}
 
 \item{pmat2}{Numeric matrix of allele frequencies in population 2, same
 layout as \code{pmat1}. Column names must contain \code{pop2}.}
@@ -20,8 +20,11 @@ columns of \code{pmat1}.}
 \item{pop2}{Character string identifying population 2; used to grep the
 columns of \code{pmat2}.}
 
-\item{gen0}{Numeric vector of allele frequencies at generation 0, one per
-variant (shared by both populations).}
+\item{gen0}{Numeric vector of allele frequencies at the start of the
+interval (typically generation 0), one per variant, shared by both
+populations; each replicate's increment is its change from these
+frequencies, equal to \code{\link[=freq_increments]{freq_increments()}} with \code{p0} for a single
+column.}
 }
 \value{
 A single number: the mean standardized between-population

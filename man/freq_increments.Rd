@@ -4,11 +4,17 @@
 \alias{freq_increments}
 \title{Allele frequency changes between adjacent generations}
 \usage{
-freq_increments(pmat)
+freq_increments(pmat, p0 = NULL)
 }
 \arguments{
 \item{pmat}{Numeric matrix of allele frequencies; time points ascending
 from the left column to the right column.}
+
+\item{p0}{Optional numeric vector of allele frequencies at the start of
+the interval, one per variant: prepended as an additional first column
+before differencing. Use when \code{pmat} holds the frequencies at the
+interval end (e.g., one column per replicate at the same time point)
+and the shared starting frequencies are kept separately.}
 }
 \value{
 A numeric matrix with the same number of rows and one fewer
@@ -21,4 +27,5 @@ matrix: columns are time points in ascending order, rows are variants.
 \examples{
 pmat <- matrix(c(0.1, 0.2, 0.3, 0.4, 0.2, 0.3, 0.4, 0.5), nrow = 2, byrow = TRUE)
 freq_increments(pmat)
+freq_increments(pmat, p0 = c(0.15, 0.35))
 }
