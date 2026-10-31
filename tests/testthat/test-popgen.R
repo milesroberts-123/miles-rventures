@@ -1002,6 +1002,58 @@ test_that("conv_cor_wn_pop errors when replicates have zero variance", {
                "denominator")
 })
 
+test_that("conv_cor_btwn_envs computes same-rep and diff-rep parts", {
+  set.seed(1)
+  pdiff_a <- matrix(rnorm(60, sd = 0.05), nrow = 20, ncol = 3)
+  pdiff_b <- matrix(rnorm(60, sd = 0.05), nrow = 20, ncol = 3)
+  res <- conv_cor_btwn_envs(pdiff_a, pdiff_b)
+  expect_length(res, 4)
+  expect_named(res, c("numer_same", "denom_same", "numer_diff", "denom_diff"))
+  cov_ab <- stats::cov(pdiff_a, pdiff_b)
+  keep <- outer(1:3, 1:3, `!=`)
+  var_a <- diag(stats::cov(pdiff_a))
+  var_b <- diag(stats::cov(pdiff_b))
+  expect_equal(res[["numer_same"]], mean(diag(cov_ab)))
+  expect_equal(res[["numer_diff"]], mean(cov_ab[keep]))
+  expect_equal(res[["denom_same"]], mean(sqrt(var_a * var_b)))
+  expect_equal(res[["denom_diff"]], mean(sqrt(outer(var_a, var_b))[keep]))
+  # same-rep uses only the diagonal: it must differ from the diff-rep mean
+  expect_false(isTRUE(all.equal(res[["numer_same"]], res[["numer_diff"]])))
+})
+
+test_that("conv_cor_btwn_envs is symmetric across environments", {
+  set.seed(2)
+  pdiff_a <- matrix(rnorm(60, sd = 0.05), nrow = 20, ncol = 3)
+  pdiff_b <- matrix(rnorm(60, sd = 0.05), nrow = 20, ncol = 3)
+  expect_equal(unname(conv_cor_btwn_envs(pdiff_a, pdiff_b)),
+               unname(conv_cor_btwn_envs(pdiff_b, pdiff_a)))
+})
+
+test_that("conv_cor_btwn_envs requires matching dimensions", {
+  expect_error(conv_cor_btwn_envs(matrix(0.1, 5, 2), matrix(0.1, 5, 3)),
+               "dim")
+  expect_error(conv_cor_btwn_envs(matrix(0.1, 5, 2), matrix(0.1, 6, 2)),
+               "dim")
+})
+
+test_that("conv_cor_btwn_envs handles NA replicate columns", {
+  set.seed(3)
+  pdiff_a <- matrix(rnorm(60, sd = 0.05), nrow = 20, ncol = 3)
+  pdiff_b <- matrix(rnorm(60, sd = 0.05), nrow = 20, ncol = 3)
+  # one all-NA replicate: its pair is dropped from the means
+  pdiff_b[, 2] <- NA
+  res <- conv_cor_btwn_envs(pdiff_a, pdiff_b)
+  expect_false(is.na(res[["numer_same"]]))
+  cov_ab <- stats::cov(pdiff_a, pdiff_b)
+  expect_equal(res[["numer_same"]], mean(diag(cov_ab), na.rm = TRUE))
+  # all-NA environment: no non-missing pairs remain
+  pdiff_b[] <- NA
+  res2 <- conv_cor_btwn_envs(pdiff_a, pdiff_b)
+  expect_true(is.nan(res2[["numer_same"]]))
+  expect_true(is.nan(res2[["denom_same"]]))
+  expect_true(is.nan(res2[["numer_diff"]]))
+})
+
 test_that("g_prime matches manual computation", {
   set.seed(1)
   pmat <- matrix(runif(15), nrow = 5, ncol = 3)
