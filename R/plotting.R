@@ -724,3 +724,101 @@ plot_effect_sizes <- function(ci_table, drop_intercept = TRUE, text_size = 20,
     ggplot2::labs(y = "Block bootstrap estimate of\nscaled coefficient",
                   x = "Model term", title = title)
 }
+
+# ---------------------------------------------------------------------------
+# Partial regression
+# ---------------------------------------------------------------------------
+
+#' Plot partial regression
+#'
+#' Draws a partial regression (added-variable) plot for one term of a linear
+#' model: the response and the focal term are each regressed on all other
+#' terms, and the two sets of residuals are plotted against each other. The
+#' fitted line passes through the origin with slope equal to the term's
+#' partial regression coefficient (Frisch-Waugh-Lovell), so the plot shows the
+#' term's association with the response after the other terms are accounted
+#' for.
+#'
+#' `primary` must be a model term that contributes exactly one column to the
+#' model matrix. Factors with three or more levels (several dummy columns) and
+#' other multi-column terms therefore cannot be plotted, but single-column
+#' terms in models containing factors, interactions, and transformed variables
+#' are supported. Rows dropped by the model's `na.action`, observation weights,
+#' and offsets are handled consistently with the fitted model; weighted fits
+#' plot `sqrt(weight)`-scaled residuals.
+#'
+#' @param mod A linear model fitted with [stats::lm()].
+#' @param primary Name of the term to plot, as written in the model formula.
+#' @param xlab X-axis label.
+#' @param ylab Y-axis label.
+#'
+#' @return A ggplot object.
+#' @export
+#'
+#' @examples
+#' mod <- stats::lm(mpg ~ wt + hp + cyl, data = mtcars)
+#' plot_partial_regression(mod, "wt")
+plot_partial_regression <- function(mod, primary, xlab = "Primary variable",
+                                    ylab = "Residuals") {
+  if (!inherits(mod, "lm")) {
+    stop("'mod' must be a linear model fitted with lm().")
+  }
+  if (!is.character(primary) || length(primary) != 1L || is.na(primary)) {
+    stop("'primary' must be a single term name.")
+  }
+
+  term_labels <- attr(stats::terms(mod), "term.labels")
+  term_pos <- match(primary, term_labels)
+  if (is.na(term_pos)) {
+    stop(
+      "'", primary, "' is not a term in the model. Model terms: ",
+      paste(term_labels, collapse = ", "), "."
+    )
+  }
+
+  mm <- stats::model.matrix(mod)
+  cols <- which(attr(mm, "assign") == term_pos)
+  if (length(cols) != 1L) {
+    stop(
+      "'", primary, "' expands to ", length(cols), " model-matrix columns ",
+      "(e.g. a factor with three or more levels); only single-column terms ",
+      "can be plotted."
+    )
+  }
+
+  y <- stats::model.response(mod$model)
+  if (is.matrix(y)) {
+    stop("Multivariate responses are not supported.")
+  }
+  offset <- stats::model.offset(mod$model)
+  if (!is.null(offset)) {
+    y <- y - offset
+  }
+
+  # model.matrix() expands factors and excludes offsets and weights, so all
+  # three matrices have the same rows as the fitted model.
+  w <- stats::model.weights(mod$model)
+  if (is.null(w)) {
+    w <- rep(1, nrow(mm))
+  }
+  x <- mm[, cols]
+  others <- mm[, -cols, drop = FALSE]
+
+  # Residualise the response and the focal term on the other terms. Scaling by
+  # sqrt(w) makes the line through the origin the weighted least-squares fit
+  # of the residuals, whose slope is the model's partial coefficient.
+  y_part <- sqrt(w) * stats::residuals(stats::lm.wfit(others, y, w))
+  x_part <- sqrt(w) * stats::residuals(stats::lm.wfit(others, x, w))
+
+  slope <- unname(stats::coef(mod)[[cols]])
+  if (!is.finite(slope)) {
+    stop("The coefficient for '", primary, "' is not estimable (aliased).")
+  }
+
+  part_data <- data.frame(y_part = y_part, x_part = x_part)
+
+  ggplot2::ggplot(part_data, ggplot2::aes(x = x_part, y = y_part)) +
+    ggplot2::geom_point() +
+    ggplot2::geom_abline(slope = slope, intercept = 0) +
+    ggplot2::labs(x = xlab, y = ylab)
+}

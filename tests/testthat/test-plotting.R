@@ -376,3 +376,114 @@ test_that("plot_effect_sizes validates its input", {
     "no rows remain"
   )
 })
+
+# ---------------------------------------------------------------------------
+# plot_partial_regression
+# ---------------------------------------------------------------------------
+
+test_that("plot_partial_regression plots residualised variables", {
+  skip_if_not_installed("ggplot2")
+  set.seed(42)
+  n <- 100
+  dat <- data.frame(
+    y = rnorm(n), x1 = rnorm(n), x2 = rnorm(n), x3 = rnorm(n)
+  )
+  dat$y <- 1 + 2 * dat$x1 - dat$x2 + 0.5 * dat$x3 + rnorm(n)
+  mod <- stats::lm(y ~ x1 + x2 + x3, data = dat)
+
+  p <- plot_partial_regression(mod, "x1")
+  expect_s3_class(p, "ggplot")
+  expect_equal(p$labels$x, "Primary variable")
+  expect_equal(p$labels$y, "Residuals")
+
+  # coordinates are the residuals from regressing each variable on the others
+  expect_equal(
+    p$data$x_part,
+    unname(stats::residuals(stats::lm(x1 ~ x2 + x3, data = dat)))
+  )
+  expect_equal(
+    p$data$y_part,
+    unname(stats::residuals(stats::lm(y ~ x2 + x3, data = dat)))
+  )
+
+  # the drawn line is the partial regression line through the origin
+  abline <- ggplot2::ggplot_build(p)$data[[2]]
+  expect_equal(abline$slope, unname(stats::coef(mod)[["x1"]]))
+  expect_equal(abline$intercept, 0)
+})
+
+test_that("plot_partial_regression handles factors, weights, and offsets", {
+  skip_if_not_installed("ggplot2")
+  set.seed(7)
+  n <- 80
+  dat <- data.frame(
+    x1 = rnorm(n), x2 = rnorm(n),
+    f = factor(sample(c("a", "b", "c"), n, replace = TRUE)),
+    w = runif(n, 0.5, 2)
+  )
+  dat$y <- 1 + 2 * dat$x1 + as.numeric(dat$f) + rnorm(n)
+  dat$z <- as.numeric(dat$f == "c")
+
+  # factor covariate: residualised on the factor's dummy columns
+  mod_f <- stats::lm(y ~ x1 + f, data = dat)
+  p_f <- plot_partial_regression(mod_f, "x1")
+  expect_equal(
+    p_f$data$x_part,
+    unname(stats::residuals(stats::lm(x1 ~ f, data = dat)))
+  )
+
+  # weights: plotted residuals are sqrt(weight)-scaled
+  mod_w <- stats::lm(y ~ x1 + x2, data = dat, weights = w)
+  p_w <- plot_partial_regression(mod_w, "x1")
+  expect_equal(
+    p_w$data$x_part,
+    unname(stats::weighted.residuals(
+      stats::lm(x1 ~ x2, data = dat, weights = w)
+    ))
+  )
+  expect_equal(
+    ggplot2::ggplot_build(p_w)$data[[2]]$slope,
+    unname(stats::coef(mod_w)[["x1"]])
+  )
+
+  # offset: the response is adjusted before residualising
+  mod_o <- stats::lm(y ~ x1 + x2 + offset(z), data = dat)
+  p_o <- plot_partial_regression(mod_o, "x1")
+  expect_equal(
+    p_o$data$y_part,
+    unname(stats::residuals(stats::lm(I(y - z) ~ x2, data = dat)))
+  )
+
+  # no intercept: there are no other columns to residualise on
+  mod_0 <- stats::lm(y ~ 0 + x1, data = dat)
+  p_0 <- plot_partial_regression(mod_0, "x1")
+  expect_equal(p_0$data$x_part, dat$x1)
+  expect_equal(
+    ggplot2::ggplot_build(p_0)$data[[2]]$slope,
+    unname(stats::coef(mod_0)[["x1"]])
+  )
+
+  # rows dropped by na.action stay dropped
+  dat$y[c(1, 5)] <- NA
+  mod_na <- stats::lm(y ~ x1 + x2, data = dat, na.action = na.exclude)
+  p_na <- plot_partial_regression(mod_na, "x1")
+  expect_equal(nrow(p_na$data), nrow(mod_na$model))
+})
+
+test_that("plot_partial_regression validates its input", {
+  skip_if_not_installed("ggplot2")
+  set.seed(1)
+  dat <- data.frame(
+    y = rnorm(30), x1 = rnorm(30),
+    f = factor(rep(c("a", "b", "c"), 10))
+  )
+  mod <- stats::lm(y ~ x1 + f, data = dat)
+
+  expect_error(plot_partial_regression(list(), "x1"), "must be a linear model")
+  expect_error(plot_partial_regression(mod, c("x1", "f")), "single term name")
+  expect_error(plot_partial_regression(mod, "nope"), "is not a term")
+  expect_error(plot_partial_regression(mod, "f"), "model-matrix columns")
+
+  mod_mv <- stats::lm(cbind(y, x1) ~ x1, data = dat)
+  expect_error(plot_partial_regression(mod_mv, "x1"), "Multivariate")
+})
