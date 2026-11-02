@@ -729,6 +729,68 @@ plot_effect_sizes <- function(ci_table, drop_intercept = TRUE, text_size = 20,
 # Partial regression
 # ---------------------------------------------------------------------------
 
+# Resolve the bounds for the limit lines: NULL for none, otherwise a length-2
+# numeric vector. ci may be TRUE (t-based confint), FALSE, or a table of bounds
+# such as the output of block_bootstrap_lm().
+partial_regression_ci_bounds <- function(mod, ci, cols, level) {
+  if (isFALSE(ci)) {
+    return(NULL)
+  }
+
+  if (is.data.frame(ci)) {
+    missing_cols <- setdiff(c("Lower_CI", "Upper_CI"), names(ci))
+    if (length(missing_cols) > 0L) {
+      stop(
+        "'ci' is missing column(s): ",
+        paste(missing_cols, collapse = ", "), "."
+      )
+    }
+
+    coef_name <- names(stats::coef(mod))[cols]
+    if ("Term" %in% names(ci)) {
+      row <- match(coef_name, ci$Term)
+      if (is.na(row)) {
+        stop("'ci' has no row for coefficient '", coef_name, "'.")
+      }
+    } else if (nrow(ci) == 1L) {
+      row <- 1L
+    } else {
+      stop(
+        "'ci' needs a 'Term' column to pick the row for '", coef_name, "'."
+      )
+    }
+
+    bounds <- c(ci$Lower_CI[row], ci$Upper_CI[row])
+    if (!all(is.finite(bounds)) || bounds[1] > bounds[2]) {
+      stop(
+        "'ci' bounds for '", coef_name, "' must be finite and ordered ",
+        "(Lower_CI <= Upper_CI)."
+      )
+    }
+    if ("Estimate" %in% names(ci) &&
+      !isTRUE(all.equal(ci$Estimate[row], stats::coef(mod)[[cols]]))) {
+      warning(
+        "'ci' Estimate for '", coef_name, "' does not match the model ",
+        "coefficient; the line uses the model."
+      )
+    }
+    return(bounds)
+  }
+
+  if (!isTRUE(ci)) {
+    stop("'ci' must be TRUE, FALSE, or a data frame of interval bounds.")
+  }
+
+  if (!is.numeric(level) || length(level) != 1L || is.na(level) ||
+    level <= 0 || level >= 1) {
+    stop("'level' must be a single number between 0 and 1.")
+  }
+
+  # t-based limits, so the lines match confint() and widen correctly for small
+  # residual degrees of freedom
+  unname(stats::confint(mod, parm = cols, level = level)[1, ])
+}
+
 #' Plot partial regression
 #'
 #' Draws a partial regression (added-variable) plot for one term of a linear
@@ -751,9 +813,15 @@ plot_effect_sizes <- function(ci_table, drop_intercept = TRUE, text_size = 20,
 #' @param primary Name of the term to plot, as written in the model formula.
 #' @param xlab X-axis label.
 #' @param ylab Y-axis label.
-#' @param ci Logical; draw dashed lines marking the `level` confidence limits
-#'   for the coefficient's slope (default TRUE).
-#' @param level Confidence level for the limit lines (default 0.95).
+#' @param ci Logical, or a data frame of confidence bounds for the slope.
+#'   `TRUE` (default) draws t-based limits at `level`; `FALSE` draws none; a
+#'   data frame with columns `Lower_CI` and `Upper_CI` draws those limits
+#'   instead. Such a table can come from [block_bootstrap_lm()], whose block
+#'   bootstrap gives wider, autocorrelation-aware bounds where independent
+#'   rows cannot be assumed. A `Term` column selects the plotted coefficient;
+#'   without it the table must have a single row.
+#' @param level Confidence level for the t-based limits (default 0.95).
+#'   Ignored when `ci` is a data frame.
 #' @param ... Additional arguments passed to [ggplot2::geom_abline()] for all
 #'   three lines, such as `colour`, `linewidth`, or `alpha`. The limit lines
 #'   are dashed unless `linetype` is supplied.
@@ -771,6 +839,15 @@ plot_effect_sizes <- function(ci_table, drop_intercept = TRUE, text_size = 20,
 #' mod <- stats::lm(mpg ~ wt + hp + cyl, data = mtcars)
 #' plot_partial_regression(mod, "wt")
 #' plot_partial_regression(mod, "wt", colour = "red", level = 0.9)
+#'
+#' # block-bootstrap limits, for rows that are not independent
+#' \donttest{
+#' boot_ci <- block_bootstrap_lm(
+#'   mtcars, mpg ~ wt + hp + cyl,
+#'   R = 200, block_length = 4, seed = 1
+#' )
+#' plot_partial_regression(mod, "wt", ci = boot_ci)
+#' }
 plot_partial_regression <- function(mod, primary, xlab = "Primary variable",
                                     ylab = "Residuals", ci = TRUE,
                                     level = 0.95, ...) {
@@ -835,14 +912,9 @@ plot_partial_regression <- function(mod, primary, xlab = "Primary variable",
     ggplot2::geom_point() +
     ggplot2::geom_abline(slope = slope, intercept = 0, ...)
 
-  if (ci) {
-    if (!is.numeric(level) || length(level) != 1L || is.na(level) ||
-      level <= 0 || level >= 1) {
-      stop("'level' must be a single number between 0 and 1.")
-    }
-    # t-based limits, so the lines match confint() and widen correctly for
-    # small residual degrees of freedom
-    bounds <- stats::confint(mod, parm = cols, level = level)
+  bounds <- partial_regression_ci_bounds(mod, ci, cols, level)
+
+  if (!is.null(bounds)) {
     dots <- list(...)
     if (is.null(dots$linetype) && is.null(dots$lty)) {
       dots$linetype <- "dashed"
@@ -853,9 +925,7 @@ plot_partial_regression <- function(mod, primary, xlab = "Primary variable",
         c(list(slope = s, intercept = 0), dots)
       )
     }
-    p <- p +
-      ci_line(unname(bounds[1, 1])) +
-      ci_line(unname(bounds[1, 2]))
+    p <- p + ci_line(bounds[1]) + ci_line(bounds[2])
   }
 
   p + ggplot2::labs(x = xlab, y = ylab)

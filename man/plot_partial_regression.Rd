@@ -23,10 +23,16 @@ plot_partial_regression(
 
 \item{ylab}{Y-axis label.}
 
-\item{ci}{Logical; draw dashed lines marking the \code{level} confidence limits
-for the coefficient's slope (default TRUE).}
+\item{ci}{Logical, or a data frame of confidence bounds for the slope.
+\code{TRUE} (default) draws t-based limits at \code{level}; \code{FALSE} draws none; a
+data frame with columns \code{Lower_CI} and \code{Upper_CI} draws those limits
+instead. Such a table can come from \code{\link[=block_bootstrap_lm]{block_bootstrap_lm()}}, whose block
+bootstrap gives wider, autocorrelation-aware bounds where independent
+rows cannot be assumed. A \code{Term} column selects the plotted coefficient;
+without it the table must have a single row.}
 
-\item{level}{Confidence level for the limit lines (default 0.95).}
+\item{level}{Confidence level for the t-based limits (default 0.95).
+Ignored when \code{ci} is a data frame.}
 
 \item{...}{Additional arguments passed to \code{\link[ggplot2:geom_abline]{ggplot2::geom_abline()}} for all
 three lines, such as \code{colour}, \code{linewidth}, or \code{alpha}. The limit lines
@@ -65,4 +71,13 @@ same side of the horizontal.
 mod <- stats::lm(mpg ~ wt + hp + cyl, data = mtcars)
 plot_partial_regression(mod, "wt")
 plot_partial_regression(mod, "wt", colour = "red", level = 0.9)
+
+# block-bootstrap limits, for rows that are not independent
+\donttest{
+boot_ci <- block_bootstrap_lm(
+  mtcars, mpg ~ wt + hp + cyl,
+  R = 200, block_length = 4, seed = 1
+)
+plot_partial_regression(mod, "wt", ci = boot_ci)
+}
 }

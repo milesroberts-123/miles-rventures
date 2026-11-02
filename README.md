@@ -82,7 +82,7 @@ library(rventures)
 - `plot_var_cov_matrix()` — upper-triangle heatmap of a variance-covariance matrix
 - `plot_predictions_truth_scatter()` — predictions vs. truth scatter with identity line, fit, and correlation stats
 - `plot_effect_sizes()` — horizontal effect-size bars for a `Term`/`Estimate`/`Lower_CI`/`Upper_CI` table (e.g., `block_bootstrap_lm` output), intercept dropped by default
-- `plot_partial_regression()` — added-variable plot of one `lm()` term, residualised on the other terms, with the partial coefficient as the line's slope
+- `plot_partial_regression()` — added-variable plot of one `lm()` term, residualised on the other terms, with the partial coefficient as the line's slope and optional t or block-bootstrap confidence limits
 
 ### Statistics
 

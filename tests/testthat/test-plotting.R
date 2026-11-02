@@ -537,6 +537,92 @@ test_that("plot_partial_regression adds t-based confidence limits", {
   )
 })
 
+test_that("plot_partial_regression draws supplied interval bounds", {
+  skip_if_not_installed("ggplot2")
+  set.seed(11)
+  dat <- data.frame(y = rnorm(60), x1 = rnorm(60), x2 = rnorm(60))
+  mod <- stats::lm(y ~ x1 + x2, data = dat)
+
+  ci_table <- data.frame(
+    Term = c("(Intercept)", "x1", "x2"),
+    Estimate = unname(stats::coef(mod)),
+    Lower_CI = c(-1, -2, -1),
+    Upper_CI = c(1, 0.5, 1)
+  )
+  p <- plot_partial_regression(mod, "x1", ci = ci_table)
+  slopes <- vapply(
+    ggplot2::ggplot_build(p)$data[2:4],
+    function(d) unique(d$slope), numeric(1)
+  )
+  expect_equal(
+    sort(slopes),
+    sort(c(stats::coef(mod)[["x1"]], -2, 0.5))
+  )
+
+  # a single-row table needs no Term column
+  p1 <- plot_partial_regression(
+    mod, "x1",
+    ci = data.frame(Lower_CI = -2, Upper_CI = 0.5)
+  )
+  expect_equal(length(p1$layers), 4L)
+
+  # a table built for a different fit warns but still plots
+  expect_warning(
+    plot_partial_regression(
+      mod, "x1",
+      ci = data.frame(
+        Term = "x1", Estimate = 99, Lower_CI = -2, Upper_CI = 0.5
+      )
+    ),
+    "does not match the model"
+  )
+
+  expect_error(
+    plot_partial_regression(
+      mod, "x1",
+      ci = data.frame(Term = "z", Lower_CI = -1, Upper_CI = 1)
+    ),
+    "no row for coefficient"
+  )
+  expect_error(
+    plot_partial_regression(mod, "x1", ci = data.frame(Term = "x1")),
+    "missing column"
+  )
+  expect_error(
+    plot_partial_regression(
+      mod, "x1", ci = data.frame(Lower_CI = 1, Upper_CI = -1)
+    ),
+    "finite and ordered"
+  )
+  expect_error(
+    plot_partial_regression(mod, "x1", ci = "boot"),
+    "must be TRUE, FALSE, or a data frame"
+  )
+})
+
+test_that("plot_partial_regression accepts block_bootstrap_lm intervals", {
+  skip_if_not_installed("ggplot2")
+  set.seed(21)
+  windows <- data.frame(y = rnorm(60), x1 = rnorm(60), x2 = rnorm(60))
+  mod <- stats::lm(y ~ x1 + x2, data = windows)
+
+  ci_table <- block_bootstrap_lm(
+    windows, y ~ x1 + x2,
+    R = 100, block_length = 4, seed = 3
+  )
+  p <- plot_partial_regression(mod, "x1", ci = ci_table)
+
+  slopes <- vapply(
+    ggplot2::ggplot_build(p)$data[2:4],
+    function(d) unique(d$slope), numeric(1)
+  )
+  row <- ci_table[ci_table$Term == "x1", ]
+  expect_equal(
+    sort(slopes),
+    sort(c(stats::coef(mod)[["x1"]], row$Lower_CI, row$Upper_CI))
+  )
+})
+
 test_that("plot_partial_regression validates its input", {
   skip_if_not_installed("ggplot2")
   set.seed(1)
