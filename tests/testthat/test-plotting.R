@@ -470,6 +470,21 @@ test_that("plot_partial_regression handles factors, weights, and offsets", {
   expect_equal(nrow(p_na$data), nrow(mod_na$model))
 })
 
+test_that("plot_partial_regression passes styling arguments to the line", {
+  skip_if_not_installed("ggplot2")
+  set.seed(3)
+  dat <- data.frame(y = rnorm(40), x1 = rnorm(40), x2 = rnorm(40))
+  mod <- stats::lm(y ~ x1 + x2, data = dat)
+
+  p <- plot_partial_regression(
+    mod, "x1", colour = "red", linewidth = 2, linetype = "dashed"
+  )
+  abline <- ggplot2::ggplot_build(p)$data[[2]]
+  expect_equal(unique(abline$colour), "red")
+  expect_equal(unique(abline$linewidth), 2)
+  expect_equal(unique(abline$linetype), "dashed")
+})
+
 test_that("plot_partial_regression validates its input", {
   skip_if_not_installed("ggplot2")
   set.seed(1)

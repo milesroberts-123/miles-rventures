@@ -751,6 +751,8 @@ plot_effect_sizes <- function(ci_table, drop_intercept = TRUE, text_size = 20,
 #' @param primary Name of the term to plot, as written in the model formula.
 #' @param xlab X-axis label.
 #' @param ylab Y-axis label.
+#' @param ... Additional arguments passed to [ggplot2::geom_abline()], such as
+#'   `colour`, `linewidth`, `linetype`, or `alpha`.
 #'
 #' @return A ggplot object.
 #' @export
@@ -758,8 +760,9 @@ plot_effect_sizes <- function(ci_table, drop_intercept = TRUE, text_size = 20,
 #' @examples
 #' mod <- stats::lm(mpg ~ wt + hp + cyl, data = mtcars)
 #' plot_partial_regression(mod, "wt")
+#' plot_partial_regression(mod, "wt", colour = "red", linetype = "dashed")
 plot_partial_regression <- function(mod, primary, xlab = "Primary variable",
-                                    ylab = "Residuals") {
+                                    ylab = "Residuals", ...) {
   if (!inherits(mod, "lm")) {
     stop("'mod' must be a linear model fitted with lm().")
   }
@@ -819,6 +822,6 @@ plot_partial_regression <- function(mod, primary, xlab = "Primary variable",
 
   ggplot2::ggplot(part_data, ggplot2::aes(x = x_part, y = y_part)) +
     ggplot2::geom_point() +
-    ggplot2::geom_abline(slope = slope, intercept = 0) +
+    ggplot2::geom_abline(slope = slope, intercept = 0, ...) +
     ggplot2::labs(x = xlab, y = ylab)
 }

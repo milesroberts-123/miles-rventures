@@ -8,7 +8,8 @@ plot_partial_regression(
   mod,
   primary,
   xlab = "Primary variable",
-  ylab = "Residuals"
+  ylab = "Residuals",
+  ...
 )
 }
 \arguments{
@@ -19,6 +20,9 @@ plot_partial_regression(
 \item{xlab}{X-axis label.}
 
 \item{ylab}{Y-axis label.}
+
+\item{...}{Additional arguments passed to \code{\link[ggplot2:geom_abline]{ggplot2::geom_abline()}}, such as
+\code{colour}, \code{linewidth}, \code{linetype}, or \code{alpha}.}
 }
 \value{
 A ggplot object.
@@ -44,4 +48,5 @@ plot \code{sqrt(weight)}-scaled residuals.
 \examples{
 mod <- stats::lm(mpg ~ wt + hp + cyl, data = mtcars)
 plot_partial_regression(mod, "wt")
+plot_partial_regression(mod, "wt", colour = "red", linetype = "dashed")
 }
