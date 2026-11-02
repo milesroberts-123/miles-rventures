@@ -751,18 +751,29 @@ plot_effect_sizes <- function(ci_table, drop_intercept = TRUE, text_size = 20,
 #' @param primary Name of the term to plot, as written in the model formula.
 #' @param xlab X-axis label.
 #' @param ylab Y-axis label.
-#' @param ... Additional arguments passed to [ggplot2::geom_abline()], such as
-#'   `colour`, `linewidth`, `linetype`, or `alpha`.
+#' @param ci Logical; draw dashed lines marking the `level` confidence limits
+#'   for the coefficient's slope (default TRUE).
+#' @param level Confidence level for the limit lines (default 0.95).
+#' @param ... Additional arguments passed to [ggplot2::geom_abline()] for all
+#'   three lines, such as `colour`, `linewidth`, or `alpha`. The limit lines
+#'   are dashed unless `linetype` is supplied.
 #'
 #' @return A ggplot object.
+#' @note The limit lines mark the confidence interval for the coefficient, so
+#'   they show the range of slopes compatible with the data, widening with
+#'   distance from the origin. They are not a prediction band: the plotted
+#'   residuals keep the full residual variance, so most points lie outside
+#'   them. A coefficient whose interval excludes zero has both limits on the
+#'   same side of the horizontal.
 #' @export
 #'
 #' @examples
 #' mod <- stats::lm(mpg ~ wt + hp + cyl, data = mtcars)
 #' plot_partial_regression(mod, "wt")
-#' plot_partial_regression(mod, "wt", colour = "red", linetype = "dashed")
+#' plot_partial_regression(mod, "wt", colour = "red", level = 0.9)
 plot_partial_regression <- function(mod, primary, xlab = "Primary variable",
-                                    ylab = "Residuals", ...) {
+                                    ylab = "Residuals", ci = TRUE,
+                                    level = 0.95, ...) {
   if (!inherits(mod, "lm")) {
     stop("'mod' must be a linear model fitted with lm().")
   }
@@ -820,8 +831,32 @@ plot_partial_regression <- function(mod, primary, xlab = "Primary variable",
 
   part_data <- data.frame(y_part = y_part, x_part = x_part)
 
-  ggplot2::ggplot(part_data, ggplot2::aes(x = x_part, y = y_part)) +
+  p <- ggplot2::ggplot(part_data, ggplot2::aes(x = x_part, y = y_part)) +
     ggplot2::geom_point() +
-    ggplot2::geom_abline(slope = slope, intercept = 0, ...) +
-    ggplot2::labs(x = xlab, y = ylab)
+    ggplot2::geom_abline(slope = slope, intercept = 0, ...)
+
+  if (ci) {
+    if (!is.numeric(level) || length(level) != 1L || is.na(level) ||
+      level <= 0 || level >= 1) {
+      stop("'level' must be a single number between 0 and 1.")
+    }
+    # t-based limits, so the lines match confint() and widen correctly for
+    # small residual degrees of freedom
+    bounds <- stats::confint(mod, parm = cols, level = level)
+    dots <- list(...)
+    if (is.null(dots$linetype) && is.null(dots$lty)) {
+      dots$linetype <- "dashed"
+    }
+    ci_line <- function(s) {
+      do.call(
+        ggplot2::geom_abline,
+        c(list(slope = s, intercept = 0), dots)
+      )
+    }
+    p <- p +
+      ci_line(unname(bounds[1, 1])) +
+      ci_line(unname(bounds[1, 2]))
+  }
+
+  p + ggplot2::labs(x = xlab, y = ylab)
 }

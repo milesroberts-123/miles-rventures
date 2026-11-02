@@ -470,19 +470,71 @@ test_that("plot_partial_regression handles factors, weights, and offsets", {
   expect_equal(nrow(p_na$data), nrow(mod_na$model))
 })
 
-test_that("plot_partial_regression passes styling arguments to the line", {
+test_that("plot_partial_regression passes styling arguments to the lines", {
   skip_if_not_installed("ggplot2")
   set.seed(3)
   dat <- data.frame(y = rnorm(40), x1 = rnorm(40), x2 = rnorm(40))
   mod <- stats::lm(y ~ x1 + x2, data = dat)
 
-  p <- plot_partial_regression(
-    mod, "x1", colour = "red", linewidth = 2, linetype = "dashed"
+  p <- plot_partial_regression(mod, "x1", colour = "red", linewidth = 2)
+  build <- ggplot2::ggplot_build(p)$data
+  expect_equal(unique(build[[2]]$colour), "red")
+  expect_equal(unique(build[[2]]$linewidth), 2)
+  # limit lines inherit the styling and stay dashed
+  expect_equal(unique(build[[3]]$colour), "red")
+  expect_equal(unique(build[[3]]$linewidth), 2)
+  expect_equal(unique(build[[3]]$linetype), "dashed")
+
+  # an explicit linetype overrides the dashed limits
+  p_dot <- plot_partial_regression(mod, "x1", linetype = "dotted")
+  expect_equal(
+    unique(ggplot2::ggplot_build(p_dot)$data[[3]]$linetype),
+    "dotted"
   )
-  abline <- ggplot2::ggplot_build(p)$data[[2]]
-  expect_equal(unique(abline$colour), "red")
-  expect_equal(unique(abline$linewidth), 2)
-  expect_equal(unique(abline$linetype), "dashed")
+})
+
+test_that("plot_partial_regression adds t-based confidence limits", {
+  skip_if_not_installed("ggplot2")
+  set.seed(5)
+  dat <- data.frame(y = rnorm(50), x1 = rnorm(50), x2 = rnorm(50))
+  mod <- stats::lm(y ~ x1 + x2, data = dat)
+
+  p <- plot_partial_regression(mod, "x1")
+  expect_equal(length(p$layers), 4L)
+
+  slopes <- vapply(
+    ggplot2::ggplot_build(p)$data[2:4],
+    function(d) unique(d$slope), numeric(1)
+  )
+  expect_equal(
+    sort(slopes),
+    sort(unname(c(
+      stats::coef(mod)[["x1"]],
+      stats::confint(mod, parm = "x1")[1, ]
+    )))
+  )
+
+  # level is adjustable and uses the t distribution, not a fixed 1.96
+  p90 <- plot_partial_regression(mod, "x1", level = 0.9)
+  slopes90 <- vapply(
+    ggplot2::ggplot_build(p90)$data[2:4],
+    function(d) unique(d$slope), numeric(1)
+  )
+  expect_equal(
+    sort(slopes90),
+    sort(unname(c(
+      stats::coef(mod)[["x1"]],
+      stats::confint(mod, parm = "x1", level = 0.9)[1, ]
+    )))
+  )
+
+  # can be switched off
+  expect_equal(length(plot_partial_regression(mod, "x1", ci = FALSE)$layers), 2L)
+
+  expect_error(
+    plot_partial_regression(mod, "x1", level = 1.5),
+    "between 0 and 1"
+  )
 })
 
 test_that("plot_partial_regression validates its input", {

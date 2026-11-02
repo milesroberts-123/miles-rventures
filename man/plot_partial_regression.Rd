@@ -9,6 +9,8 @@ plot_partial_regression(
   primary,
   xlab = "Primary variable",
   ylab = "Residuals",
+  ci = TRUE,
+  level = 0.95,
   ...
 )
 }
@@ -21,8 +23,14 @@ plot_partial_regression(
 
 \item{ylab}{Y-axis label.}
 
-\item{...}{Additional arguments passed to \code{\link[ggplot2:geom_abline]{ggplot2::geom_abline()}}, such as
-\code{colour}, \code{linewidth}, \code{linetype}, or \code{alpha}.}
+\item{ci}{Logical; draw dashed lines marking the \code{level} confidence limits
+for the coefficient's slope (default TRUE).}
+
+\item{level}{Confidence level for the limit lines (default 0.95).}
+
+\item{...}{Additional arguments passed to \code{\link[ggplot2:geom_abline]{ggplot2::geom_abline()}} for all
+three lines, such as \code{colour}, \code{linewidth}, or \code{alpha}. The limit lines
+are dashed unless \code{linetype} is supplied.}
 }
 \value{
 A ggplot object.
@@ -45,8 +53,16 @@ are supported. Rows dropped by the model's \code{na.action}, observation weights
 and offsets are handled consistently with the fitted model; weighted fits
 plot \code{sqrt(weight)}-scaled residuals.
 }
+\note{
+The limit lines mark the confidence interval for the coefficient, so
+they show the range of slopes compatible with the data, widening with
+distance from the origin. They are not a prediction band: the plotted
+residuals keep the full residual variance, so most points lie outside
+them. A coefficient whose interval excludes zero has both limits on the
+same side of the horizontal.
+}
 \examples{
 mod <- stats::lm(mpg ~ wt + hp + cyl, data = mtcars)
 plot_partial_regression(mod, "wt")
-plot_partial_regression(mod, "wt", colour = "red", linetype = "dashed")
+plot_partial_regression(mod, "wt", colour = "red", level = 0.9)
 }
