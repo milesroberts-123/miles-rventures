@@ -480,16 +480,53 @@ test_that("plot_partial_regression passes styling arguments to the lines", {
   build <- ggplot2::ggplot_build(p)$data
   expect_equal(unique(build[[2]]$colour), "red")
   expect_equal(unique(build[[2]]$linewidth), 2)
-  # limit lines inherit the styling and stay dashed
-  expect_equal(unique(build[[3]]$colour), "red")
+  # limit lines take linewidth and stay dashed, but not the estimate colour
+  expect_equal(unique(build[[3]]$colour), "grey40")
+  expect_equal(unique(build[[4]]$colour), "grey40")
   expect_equal(unique(build[[3]]$linewidth), 2)
   expect_equal(unique(build[[3]]$linetype), "dashed")
+
+  # ci_colour is independent of the estimate colour
+  p_ci <- plot_partial_regression(
+    mod, "x1", colour = "red", ci_colour = "steelblue"
+  )
+  build_ci <- ggplot2::ggplot_build(p_ci)$data
+  expect_equal(unique(build_ci[[2]]$colour), "red")
+  expect_equal(unique(build_ci[[3]]$colour), "steelblue")
+  expect_equal(unique(build_ci[[4]]$colour), "steelblue")
 
   # an explicit linetype overrides the dashed limits
   p_dot <- plot_partial_regression(mod, "x1", linetype = "dotted")
   expect_equal(
     unique(ggplot2::ggplot_build(p_dot)$data[[3]]$linetype),
     "dotted"
+  )
+})
+
+test_that("plot_partial_regression sets point opacity", {
+  skip_if_not_installed("ggplot2")
+  set.seed(4)
+  dat <- data.frame(y = rnorm(30), x1 = rnorm(30), x2 = rnorm(30))
+  mod <- stats::lm(y ~ x1 + x2, data = dat)
+
+  # default is fully opaque
+  default_alpha <- ggplot2::ggplot_build(
+    plot_partial_regression(mod, "x1")
+  )$data[[1]]$alpha
+  expect_true(all(is.na(default_alpha) | default_alpha == 1))
+
+  faded <- ggplot2::ggplot_build(
+    plot_partial_regression(mod, "x1", point_alpha = 0.2)
+  )$data[[1]]$alpha
+  expect_equal(unique(faded), 0.2)
+
+  expect_error(
+    plot_partial_regression(mod, "x1", point_alpha = 1.5),
+    "between 0 and 1"
+  )
+  expect_error(
+    plot_partial_regression(mod, "x1", point_alpha = "low"),
+    "between 0 and 1"
   )
 })
 
@@ -636,6 +673,10 @@ test_that("plot_partial_regression validates its input", {
   expect_error(plot_partial_regression(mod, c("x1", "f")), "single term name")
   expect_error(plot_partial_regression(mod, "nope"), "is not a term")
   expect_error(plot_partial_regression(mod, "f"), "model-matrix columns")
+  expect_error(
+    plot_partial_regression(mod, "x1", ci_colour = c("red", "blue")),
+    "single colour name"
+  )
 
   mod_mv <- stats::lm(cbind(y, x1) ~ x1, data = dat)
   expect_error(plot_partial_regression(mod_mv, "x1"), "Multivariate")

@@ -822,9 +822,14 @@ partial_regression_ci_bounds <- function(mod, ci, cols, level) {
 #'   without it the table must have a single row.
 #' @param level Confidence level for the t-based limits (default 0.95).
 #'   Ignored when `ci` is a data frame.
-#' @param ... Additional arguments passed to [ggplot2::geom_abline()] for all
-#'   three lines, such as `colour`, `linewidth`, or `alpha`. The limit lines
-#'   are dashed unless `linetype` is supplied.
+#' @param ci_colour Colour of the limit lines (default `"grey40"`), kept
+#'   distinct from the estimate line's colour.
+#' @param point_alpha Opacity of the points (default 1; use e.g. 0.2 to reduce
+#'   overplotting).
+#' @param ... Additional arguments passed to [ggplot2::geom_abline()] for the
+#'   estimate line, such as `colour`, `linewidth`, or `alpha`. The limit lines
+#'   take `linewidth`/`alpha` and `linetype` from here too, but their colour
+#'   comes from `ci_colour`; they are dashed unless `linetype` is supplied.
 #'
 #' @return A ggplot object.
 #' @note The limit lines mark the confidence interval for the coefficient, so
@@ -838,7 +843,8 @@ partial_regression_ci_bounds <- function(mod, ci, cols, level) {
 #' @examples
 #' mod <- stats::lm(mpg ~ wt + hp + cyl, data = mtcars)
 #' plot_partial_regression(mod, "wt")
-#' plot_partial_regression(mod, "wt", colour = "red", level = 0.9)
+#' plot_partial_regression(mod, "wt", point_alpha = 0.4, level = 0.9)
+#' plot_partial_regression(mod, "wt", colour = "red", ci_colour = "steelblue")
 #'
 #' # block-bootstrap limits, for rows that are not independent
 #' \donttest{
@@ -850,12 +856,21 @@ partial_regression_ci_bounds <- function(mod, ci, cols, level) {
 #' }
 plot_partial_regression <- function(mod, primary, xlab = "Primary variable",
                                     ylab = "Residuals", ci = TRUE,
-                                    level = 0.95, ...) {
+                                    level = 0.95, ci_colour = "grey40",
+                                    point_alpha = 1, ...) {
   if (!inherits(mod, "lm")) {
     stop("'mod' must be a linear model fitted with lm().")
   }
   if (!is.character(primary) || length(primary) != 1L || is.na(primary)) {
     stop("'primary' must be a single term name.")
+  }
+  if (!is.character(ci_colour) || length(ci_colour) != 1L ||
+    is.na(ci_colour)) {
+    stop("'ci_colour' must be a single colour name.")
+  }
+  if (!is.numeric(point_alpha) || length(point_alpha) != 1L ||
+    is.na(point_alpha) || point_alpha < 0 || point_alpha > 1) {
+    stop("'point_alpha' must be a single number between 0 and 1.")
   }
 
   term_labels <- attr(stats::terms(mod), "term.labels")
@@ -909,13 +924,14 @@ plot_partial_regression <- function(mod, primary, xlab = "Primary variable",
   part_data <- data.frame(y_part = y_part, x_part = x_part)
 
   p <- ggplot2::ggplot(part_data, ggplot2::aes(x = x_part, y = y_part)) +
-    ggplot2::geom_point() +
+    ggplot2::geom_point(alpha = point_alpha) +
     ggplot2::geom_abline(slope = slope, intercept = 0, ...)
 
   bounds <- partial_regression_ci_bounds(mod, ci, cols, level)
 
   if (!is.null(bounds)) {
     dots <- list(...)
+    dots$colour <- ci_colour
     if (is.null(dots$linetype) && is.null(dots$lty)) {
       dots$linetype <- "dashed"
     }

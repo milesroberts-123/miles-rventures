@@ -11,6 +11,8 @@ plot_partial_regression(
   ylab = "Residuals",
   ci = TRUE,
   level = 0.95,
+  ci_colour = "grey40",
+  point_alpha = 1,
   ...
 )
 }
@@ -34,9 +36,16 @@ without it the table must have a single row.}
 \item{level}{Confidence level for the t-based limits (default 0.95).
 Ignored when \code{ci} is a data frame.}
 
-\item{...}{Additional arguments passed to \code{\link[ggplot2:geom_abline]{ggplot2::geom_abline()}} for all
-three lines, such as \code{colour}, \code{linewidth}, or \code{alpha}. The limit lines
-are dashed unless \code{linetype} is supplied.}
+\item{ci_colour}{Colour of the limit lines (default \code{"grey40"}), kept
+distinct from the estimate line's colour.}
+
+\item{point_alpha}{Opacity of the points (default 1; use e.g. 0.2 to reduce
+overplotting).}
+
+\item{...}{Additional arguments passed to \code{\link[ggplot2:geom_abline]{ggplot2::geom_abline()}} for the
+estimate line, such as \code{colour}, \code{linewidth}, or \code{alpha}. The limit lines
+take \code{linewidth}/\code{alpha} and \code{linetype} from here too, but their colour
+comes from \code{ci_colour}; they are dashed unless \code{linetype} is supplied.}
 }
 \value{
 A ggplot object.
@@ -70,7 +79,8 @@ same side of the horizontal.
 \examples{
 mod <- stats::lm(mpg ~ wt + hp + cyl, data = mtcars)
 plot_partial_regression(mod, "wt")
-plot_partial_regression(mod, "wt", colour = "red", level = 0.9)
+plot_partial_regression(mod, "wt", point_alpha = 0.4, level = 0.9)
+plot_partial_regression(mod, "wt", colour = "red", ci_colour = "steelblue")
 
 # block-bootstrap limits, for rows that are not independent
 \donttest{
