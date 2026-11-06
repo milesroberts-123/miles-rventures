@@ -1361,57 +1361,69 @@ conv_cor_wn_pop <- function(pdiff) {
 #' Computes the numerator and denominator parts of convergence correlations
 #' between two environments (sites), following the Buffalo & Coop (2020)
 #' ratio-of-averages convention: the mean cross-covariance of allele
-#' frequency changes between replicate populations scaled by the average
-#' square root of the product of their within-replicate variances. Two
-#' pairings are returned separately:
-#' \itemize{
-#'   \item \code{same_rep}: replicate \code{r} of environment A paired with
-#'     replicate \code{r} of environment B (the diagonal of the
-#'     cross-covariance matrix). Only meaningful when the two environments
-#'     share founding replicates, i.e., the columns of both matrices are
-#'     ordered by the same replicate labels.
-#'   \item \code{diff_rep}: all between-environment replicate pairings with
-#'     distinct replicate labels (the off-diagonal elements), the
-#'     convergent-selection estimand.
-#' }
-#' Parts are returned uncombined so callers can aggregate ratio-of-sums
-#' across windows: combine as \code{mean(numerators) / mean(denominators)}
-#' weighted by the number of variants.
+#' frequency changes over every pair of replicate populations, one from each
+#' environment, scaled by the mean square root of the product of their
+#' within-replicate variances.
+#'
+#' All \code{n_a * n_b} cross-environment replicate pairs contribute, with
+#' equal weight. Columns are not paired by position or label, so the two
+#' environments need not have the same number of replicates, and replicate
+#' numbers are not assumed to correspond. Environments that share founding
+#' replicates (the same replicate split across environments) are therefore
+#' not handled: their same-replicate pairs carry shared drift, which would
+#' inflate the estimate.
+#'
+#' Covariances and variances use pairwise-complete observations. A pair enters
+#' both the numerator and the denominator only when its covariance and both
+#' variance terms are finite and positive, so the two means always cover the
+#' same pairs. Pairs involving a zero-variance replicate are excluded. Parts
+#' are returned uncombined so callers can aggregate ratio-of-sums across
+#' windows: combine as \code{mean(numerators) / mean(denominators)}.
 #'
 #' @param pdiff_a Numeric matrix of allele frequency changes for environment
 #'   A: rows = variants, columns = replicate time series of one interval
-#'   (one column per replicate), with at least 2 rows and 2 columns.
-#' @param pdiff_b Numeric matrix for environment B, with the same
-#'   dimensions as `pdiff_a` and columns ordered by the same replicate
-#'   labels.
+#'   (one column per replicate), with at least 2 rows and 1 column.
+#' @param pdiff_b Numeric matrix for environment B, with the same number of
+#'   rows as `pdiff_a`; the number of columns may differ.
 #'
-#' @return A named numeric vector of length 4:
-#'   `c(numer_same, denom_same, numer_diff, denom_diff)`. Entries are `NaN`
-#'   when no non-missing covariance contributes to them (e.g., an all-NA
-#'   replicate column).
+#' @return A named numeric vector of length 2: `c(numer, denom)`. Entries are
+#'   `NaN` when no pair with finite, positive variance terms is available
+#'   (e.g., an all-NA environment).
 #' @export
 #'
 #' @examples
 #' set.seed(1)
 #' pdiff_a <- matrix(rnorm(40, sd = 0.05), nrow = 20, ncol = 2)
-#' pdiff_b <- matrix(rnorm(40, sd = 0.05), nrow = 20, ncol = 2)
+#' pdiff_b <- matrix(rnorm(60, sd = 0.05), nrow = 20, ncol = 3)
 #' conv_cor_btwn_envs(pdiff_a, pdiff_b)
 conv_cor_btwn_envs <- function(pdiff_a, pdiff_b) {
-  stopifnot(identical(dim(pdiff_a), dim(pdiff_b)))
-  stopifnot(ncol(pdiff_a) > 1, nrow(pdiff_a) > 1)
+  check_pdiff <- function(x, name) {
+    if (!is.matrix(x) || !is.numeric(x)) {
+      stop("'", name, "' must be a numeric matrix.")
+    }
+    if (nrow(x) < 2L) {
+      stop("'", name, "' must have at least 2 rows.")
+    }
+    if (ncol(x) < 1L) {
+      stop("'", name, "' must have at least 1 column.")
+    }
+  }
+  check_pdiff(pdiff_a, "pdiff_a")
+  check_pdiff(pdiff_b, "pdiff_b")
+  if (nrow(pdiff_a) != nrow(pdiff_b)) {
+    stop("'pdiff_a' and 'pdiff_b' must have the same number of rows.")
+  }
+
   cov_ab <- stats::cov(pdiff_a, pdiff_b, use = "pairwise.complete.obs")
   var_a <- diag(stats::cov(pdiff_a, use = "pairwise.complete.obs"))
   var_b <- diag(stats::cov(pdiff_b, use = "pairwise.complete.obs"))
-  r <- seq_len(ncol(pdiff_a))
-  # same replicate label: the diagonal of the cross-covariance matrix
-  numer_same <- mean(diag(cov_ab), na.rm = TRUE)
-  denom_same <- mean(sqrt(var_a * var_b), na.rm = TRUE)
-  # distinct replicate labels: the off-diagonal cross-covariances
-  keep <- outer(r, r, `!=`)
-  numer_diff <- mean(cov_ab[keep], na.rm = TRUE)
-  denom_diff <- mean(sqrt(outer(var_a, var_b))[keep], na.rm = TRUE)
-  return(c(numer_same = numer_same, denom_same = denom_same,
-           numer_diff = numer_diff, denom_diff = denom_diff))
+
+  # One mask for both means: a pair contributes only if its covariance and
+  # both variance terms are usable.
+  denom_mat <- sqrt(outer(var_a, var_b))
+  keep <- is.finite(cov_ab) & is.finite(denom_mat) & denom_mat > 0
+
+  c(numer = mean(cov_ab[keep]), denom = mean(denom_mat[keep]))
 }
 
 #' Replicate G(t): proportion of variance in allele frequency change due to

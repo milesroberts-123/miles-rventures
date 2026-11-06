@@ -1002,56 +1002,123 @@ test_that("conv_cor_wn_pop errors when replicates have zero variance", {
                "denominator")
 })
 
-test_that("conv_cor_btwn_envs computes same-rep and diff-rep parts", {
+test_that("conv_cor_btwn_envs averages over all cross-environment pairs", {
   set.seed(1)
   pdiff_a <- matrix(rnorm(60, sd = 0.05), nrow = 20, ncol = 3)
   pdiff_b <- matrix(rnorm(60, sd = 0.05), nrow = 20, ncol = 3)
   res <- conv_cor_btwn_envs(pdiff_a, pdiff_b)
-  expect_length(res, 4)
-  expect_named(res, c("numer_same", "denom_same", "numer_diff", "denom_diff"))
+  expect_length(res, 2)
+  expect_named(res, c("numer", "denom"))
   cov_ab <- stats::cov(pdiff_a, pdiff_b)
-  keep <- outer(1:3, 1:3, `!=`)
   var_a <- diag(stats::cov(pdiff_a))
   var_b <- diag(stats::cov(pdiff_b))
-  expect_equal(res[["numer_same"]], mean(diag(cov_ab)))
-  expect_equal(res[["numer_diff"]], mean(cov_ab[keep]))
-  expect_equal(res[["denom_same"]], mean(sqrt(var_a * var_b)))
-  expect_equal(res[["denom_diff"]], mean(sqrt(outer(var_a, var_b))[keep]))
-  # same-rep uses only the diagonal: it must differ from the diff-rep mean
-  expect_false(isTRUE(all.equal(res[["numer_same"]], res[["numer_diff"]])))
+  expect_equal(res[["numer"]], mean(cov_ab))
+  expect_equal(res[["denom"]], mean(sqrt(outer(var_a, var_b))))
+  expect_lte(abs(res[["numer"]]), res[["denom"]])
 })
 
-test_that("conv_cor_btwn_envs is symmetric across environments", {
+test_that("conv_cor_btwn_envs allows unequal replicate counts", {
   set.seed(2)
-  pdiff_a <- matrix(rnorm(60, sd = 0.05), nrow = 20, ncol = 3)
-  pdiff_b <- matrix(rnorm(60, sd = 0.05), nrow = 20, ncol = 3)
-  expect_equal(unname(conv_cor_btwn_envs(pdiff_a, pdiff_b)),
-               unname(conv_cor_btwn_envs(pdiff_b, pdiff_a)))
-})
-
-test_that("conv_cor_btwn_envs requires matching dimensions", {
-  expect_error(conv_cor_btwn_envs(matrix(0.1, 5, 2), matrix(0.1, 5, 3)),
-               "dim")
-  expect_error(conv_cor_btwn_envs(matrix(0.1, 5, 2), matrix(0.1, 6, 2)),
-               "dim")
-})
-
-test_that("conv_cor_btwn_envs handles NA replicate columns", {
-  set.seed(3)
-  pdiff_a <- matrix(rnorm(60, sd = 0.05), nrow = 20, ncol = 3)
-  pdiff_b <- matrix(rnorm(60, sd = 0.05), nrow = 20, ncol = 3)
-  # one all-NA replicate: its pair is dropped from the means
-  pdiff_b[, 2] <- NA
+  pdiff_a <- matrix(rnorm(40, sd = 0.05), nrow = 20, ncol = 2)
+  pdiff_b <- matrix(rnorm(80, sd = 0.05), nrow = 20, ncol = 4)
   res <- conv_cor_btwn_envs(pdiff_a, pdiff_b)
-  expect_false(is.na(res[["numer_same"]]))
+  expect_length(res, 2)
+
   cov_ab <- stats::cov(pdiff_a, pdiff_b)
-  expect_equal(res[["numer_same"]], mean(diag(cov_ab), na.rm = TRUE))
-  # all-NA environment: no non-missing pairs remain
+  expect_identical(dim(cov_ab), c(2L, 4L))
+  expect_equal(res[["numer"]], mean(cov_ab))
+
+  # symmetric in the two environments
+  expect_equal(
+    unname(conv_cor_btwn_envs(pdiff_a, pdiff_b)),
+    unname(conv_cor_btwn_envs(pdiff_b, pdiff_a))
+  )
+})
+
+test_that("conv_cor_btwn_envs handles single-replicate environments", {
+  set.seed(3)
+  a <- matrix(rnorm(30, sd = 0.05), nrow = 30, ncol = 1)
+  b <- matrix(rnorm(30, sd = 0.05), nrow = 30, ncol = 1)
+  res <- conv_cor_btwn_envs(a, b)
+  expect_equal(res[["numer"]], stats::cov(a[, 1], b[, 1]))
+  expect_equal(
+    res[["denom"]],
+    sqrt(stats::var(a[, 1]) * stats::var(b[, 1]))
+  )
+})
+
+test_that("conv_cor_btwn_envs uses one mask for numerator and denominator", {
+  # pair (A1, B2) has no shared non-NA rows, so its covariance is NA while
+  # both marginal variances are still estimable: the denominator must drop
+  # that pair too
+  set.seed(4)
+  pdiff_a <- matrix(rnorm(200, sd = 0.05), nrow = 100, ncol = 2)
+  pdiff_b <- matrix(rnorm(200, sd = 0.05), nrow = 100, ncol = 2)
+  pdiff_a[, 1] <- NA
+  pdiff_a[51:100, 1] <- rnorm(50, sd = 0.05)
+  pdiff_b[, 2] <- NA
+  pdiff_b[1:50, 2] <- rnorm(50, sd = 0.05)
+
+  res <- conv_cor_btwn_envs(pdiff_a, pdiff_b)
+  cov_ab <- stats::cov(pdiff_a, pdiff_b, use = "pairwise.complete.obs")
+  var_a <- diag(stats::cov(pdiff_a, use = "pairwise.complete.obs"))
+  var_b <- diag(stats::cov(pdiff_b, use = "pairwise.complete.obs"))
+  den <- sqrt(outer(var_a, var_b))
+  keep <- is.finite(cov_ab) & is.finite(den) & den > 0
+
+  expect_false(is.finite(cov_ab[1, 2]))
+  expect_true(is.finite(den[1, 2]))
+  expect_equal(res[["numer"]], mean(cov_ab[keep]))
+  expect_equal(res[["denom"]], mean(den[keep]))
+  # averaging every finite denominator term would differ
+  expect_false(isTRUE(all.equal(res[["denom"]], mean(den, na.rm = TRUE))))
+})
+
+test_that("conv_cor_btwn_envs excludes zero-variance replicates", {
+  set.seed(5)
+  pdiff_a <- matrix(rnorm(40, sd = 0.05), nrow = 20, ncol = 2)
+  pdiff_b <- matrix(rnorm(60, sd = 0.05), nrow = 20, ncol = 3)
+  pdiff_b[, 3] <- 0.1
+  res <- conv_cor_btwn_envs(pdiff_a, pdiff_b)
+
+  var_a <- diag(stats::cov(pdiff_a))
+  var_b <- diag(stats::cov(pdiff_b))
+  den <- sqrt(outer(var_a, var_b))
+  cov_ab <- stats::cov(pdiff_a, pdiff_b)
+  keep <- is.finite(cov_ab) & is.finite(den) & den > 0
+  expect_equal(res[["denom"]], mean(den[keep]))
+  # the constant replicate contributes no pair
+  expect_equal(sum(keep), 4L)
+})
+
+test_that("conv_cor_btwn_envs returns NaN when no pair is estimable", {
+  set.seed(6)
+  pdiff_a <- matrix(rnorm(40, sd = 0.05), nrow = 20, ncol = 2)
+  pdiff_b <- matrix(rnorm(40, sd = 0.05), nrow = 20, ncol = 2)
   pdiff_b[] <- NA
-  res2 <- conv_cor_btwn_envs(pdiff_a, pdiff_b)
-  expect_true(is.nan(res2[["numer_same"]]))
-  expect_true(is.nan(res2[["denom_same"]]))
-  expect_true(is.nan(res2[["numer_diff"]]))
+  res <- conv_cor_btwn_envs(pdiff_a, pdiff_b)
+  expect_true(is.nan(res[["numer"]]))
+  expect_true(is.nan(res[["denom"]]))
+})
+
+test_that("conv_cor_btwn_envs validates its input", {
+  a <- matrix(rnorm(20), nrow = 10, ncol = 2)
+  b <- matrix(rnorm(30), nrow = 10, ncol = 3)
+  expect_error(conv_cor_btwn_envs(as.numeric(a[, 1]), b), "numeric matrix")
+  expect_error(conv_cor_btwn_envs(data.frame(a), b), "numeric matrix")
+  expect_error(
+    conv_cor_btwn_envs(matrix(letters[1:20], 10, 2), b),
+    "numeric matrix"
+  )
+  expect_error(
+    conv_cor_btwn_envs(matrix(1, 1, 2), matrix(1, 1, 2)),
+    "at least 2 rows"
+  )
+  expect_error(conv_cor_btwn_envs(matrix(1, 10, 0), b), "at least 1 column")
+  expect_error(
+    conv_cor_btwn_envs(a, matrix(rnorm(20), nrow = 5, ncol = 4)),
+    "same number of rows"
+  )
 })
 
 test_that("g_prime matches manual computation", {
