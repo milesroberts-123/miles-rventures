@@ -1,0 +1,159 @@
+---
+title: "Function drafts"
+output:
+  html_notebook:
+    toc: true
+    toc_depth: 2
+editor_options:
+  chunk_output_type: console
+---
+
+How to use this notebook:
+
+- Draft by hand, one function per chunk. Run a chunk with Ctrl+Enter (Cmd+Enter).
+- Put a check immediately below each function so you see failures while the code is fresh.
+- Drafts stay here until they work. The promotion checklist at the end moves one into the package.
+
+\newpage
+
+## Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  comment = "#>"
+)
+```
+
+```{r load-package, eval=FALSE}
+# Load a package already installed from this repo
+# library(rventures)
+
+# ...or load the working tree without reinstalling (adjust the path)
+# pkgload::load_all("~/moi_lab_projects/miles-rventures")
+```
+
+\newpage
+
+## Draft 1
+
+```{r draft-1}
+#' One-line title
+#'
+#' What the function does, and any behaviour a reader would not guess from
+#' the code: NA handling, recycling, warnings, side effects.
+#'
+#' @param x Describe each argument: type, shape, and what values are valid.
+#' @return What comes back, including its type and length.
+#' @export
+#' @examples
+#' draft_fn(1:3)
+draft_fn <- function(x) {
+  # 1. Validate: type, length, missing values, empty input.
+  # 2. Do the work.
+  # 3. Return one clearly shaped object.
+}
+```
+
+```{r draft-1-checks, eval=FALSE}
+# Happy path: exact expected values, not just "it ran".
+stopifnot(identical(draft_fn(1:3), c(2, 4, 6)))
+
+# Edges worth covering for almost any function:
+# - empty input:        draft_fn(numeric(0))
+# - missing values:     draft_fn(c(1, NA, 3))
+# - wrong type:         testthat::expect_error(draft_fn("x"), "numeric")
+# - length one:         draft_fn(1)
+# - degenerate stats:   draft_fn(rep(5, 10))  # zero variance
+```
+
+\newpage
+
+## Draft 2
+
+```{r draft-2}
+#' One-line title
+#'
+#' Description.
+#'
+#' @param x Description.
+#' @return Description.
+#' @export
+#' @examples
+#' draft_fn2(1:3)
+draft_fn2 <- function(x) {
+  # Validate, work, return.
+}
+```
+
+```{r draft-2-checks, eval=FALSE}
+stopifnot(identical(draft_fn2(1:3), ...))
+```
+
+\newpage
+
+## Draft 3
+
+```{r draft-3}
+#' One-line title
+#'
+#' Description.
+#'
+#' @param x Description.
+#' @return Description.
+#' @export
+#' @examples
+#' draft_fn3(1:3)
+draft_fn3 <- function(x) {
+  # Validate, work, return.
+}
+```
+
+```{r draft-3-checks, eval=FALSE}
+stopifnot(identical(draft_fn3(1:3), ...))
+```
+
+\newpage
+
+## Scratch data
+
+```{r scratch-data, eval=FALSE}
+set.seed(1)
+dat <- data.frame(
+  x = rnorm(100),
+  y = rnorm(100)
+)
+```
+
+\newpage
+
+## Practice prompts
+
+Pick one and write it from scratch, no lookup. Each has a natural edge case.
+
+- Rolling mean of a numeric vector with a window width, `NA` when the window is incomplete.
+- Mode of a vector, with a documented rule for ties.
+- Safe division that returns `NA` instead of `Inf` when the denominator is zero.
+- Collapse a named list of data frames into one, adding a column with each element's name.
+- Given a numeric matrix, return the row and column of the largest absolute value.
+
+\newpage
+
+## Promote to the package
+
+1. Move the function into the matching module in `R/`: `plotting.R`, `file_management.R`, `statistics.R`, or `popgen.R`.
+2. Complete the roxygen block, then run `devtools::document()`.
+3. Add tests to `tests/testthat/test-<module>.R`, then run `devtools::test(filter = "<module>")`.
+4. Run the full suite with `devtools::test()`.
+5. Bump `Version:` in `DESCRIPTION`: `feat:` minor, `fix:` patch, breaking major.
+6. Commit with a semantic prefix (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`).
+
+## Before you call it done
+
+- [ ] Every argument is documented and validated.
+- [ ] The return value has one predictable shape.
+- [ ] Empty, `NA`, and wrong-type inputs behave as documented.
+- [ ] At least one test asserts exact values, not just absence of errors.
+- [ ] `devtools::check()` (or `R CMD build` + `R CMD check`) is clean for this change.
