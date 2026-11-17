@@ -1,3 +1,21 @@
+test_that("cholesky_decorrelate does notion when var-cov matrix is identity matrix",{(
+										      mu <- c(8, 5)
+										      E <- matrix(c(1, 0, 0, 1), nrow = 2)
+										      X <- mvrnorm(n = 100, mu = mu, Sigma = E)
+    expect_true(all(cholesky_decorrelate(X, E) - X) < 1e-16))
+})
+
+test_that("cholesky_decorrelate input and output dimmensions match", {(
+						  mu <- c(2, 5)
+						  E <- matrix(c(2, 0.5, 0.5, 2), nrow = 2)
+						  X <- mvrnorm(n = 100, mu = mu, Sigma = E)
+						  expect_true(all(dim(X) == dim(cholesky_decorrelate(X, E))))
+
+})
+
+# input and output dimmensions match
+stopifnot(all(dim(X) == dim(cholesky_decorrelate(X, E))))
+
 test_that("corr_ci_autocorr returns a list with expected names", {
   set.seed(1)
   x <- rnorm(100)

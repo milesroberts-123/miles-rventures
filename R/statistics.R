@@ -1,3 +1,41 @@
+#' Decorrelate vector by cholesky decomposition
+#'
+#' I grabbed the definition from here: https://en.wikipedia.org/wiki/Whitening_transformation#Definition
+#' the code: NA handling, recycling, warnings, side effects.
+#'
+#' @param x matrix of variables to decorrelate
+#' @param E variance covariance matrix of vector elements, should be a square matrix
+#' @param center default is FALSE, whether the returned matrix should be centered at zero in every dimmension. The default returns a matrix where each dimmension is centered at it's mean
+#' @return matrix of decorrelated variables, same shape as x
+#' @export
+#' @examples
+#' # Define mean vector and positive-definite covariance matrix
+#' mu <- c(8, 5)
+#' E <- matrix(c(2, 1.9, 1.9, 2), nrow = 2)
+#' X <- MASS::mvrnorm(n = 100, mu = mu, Sigma = E)
+#' cholesky_decorrelate(X, E)
+cholesky_decorrelate <- function(x, E, center = F) {
+	  # Validate: type, length, missing values, empty input.
+	  stopifnot(is.numeric(x), is.numeric(E), !is.null(x), !is.null(E), !any(is.na(x)), !any(is.na(E)), all(dim(x) > 1), all(dim(E) > 1), all(diag(E) > 0))
+  # whitening operations need centered data
+  mu <- colMeans(x)
+    # invert the matrix
+    E_inv <- solve(E)
+    # cholesky decomposition
+    W = chol(E_inv)
+      # transpose decomposed matrix
+      # t(W) %*% W %*% E gives the identity matrix
+      Wt <- t(W)
+      # decorrelation
+      y = sweep(x, 2, mu, "-") %*% Wt
+        # Return decorrelated values with or without mean
+        if(!center){
+		    return(sweep(y, 2, mu, "+"))  
+        } else{
+		    return(y)
+	  }
+}
+
 #' Confidence interval for a Pearson correlation, adjusted for AR(1) autocorrelation
 #'
 #' Computes a confidence interval (and optional zero-correlation test) for the
