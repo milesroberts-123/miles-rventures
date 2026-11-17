@@ -1,20 +1,98 @@
-test_that("cholesky_decorrelate does notion when var-cov matrix is identity matrix",{(
-										      mu <- c(8, 5)
-										      E <- matrix(c(1, 0, 0, 1), nrow = 2)
-										      X <- mvrnorm(n = 100, mu = mu, Sigma = E)
-    expect_true(all(cholesky_decorrelate(X, E) - X) < 1e-16))
+test_that("cholesky_decorrelate leaves data unchanged with an identity covariance", {
+  skip_if_not_installed("MASS")
+  set.seed(1)
+  mu <- c(8, 5)
+  E <- matrix(c(1, 0, 0, 1), nrow = 2)
+  X <- MASS::mvrnorm(n = 100, mu = mu, Sigma = E)
+
+  expect_equal(
+    unname(cholesky_decorrelate(X, E)),
+    unname(X),
+    tolerance = 1e-12
+  )
 })
 
-test_that("cholesky_decorrelate input and output dimmensions match", {(
-						  mu <- c(2, 5)
-						  E <- matrix(c(2, 0.5, 0.5, 2), nrow = 2)
-						  X <- mvrnorm(n = 100, mu = mu, Sigma = E)
-						  expect_true(all(dim(X) == dim(cholesky_decorrelate(X, E))))
+test_that("cholesky_decorrelate preserves input and output dimensions", {
+  skip_if_not_installed("MASS")
+  set.seed(1)
+  mu <- c(2, 5)
+  E <- matrix(c(2, 0.5, 0.5, 2), nrow = 2)
+  X <- MASS::mvrnorm(n = 100, mu = mu, Sigma = E)
 
+  expect_identical(dim(cholesky_decorrelate(X, E)), dim(X))
 })
 
-# input and output dimmensions match
-stopifnot(all(dim(X) == dim(cholesky_decorrelate(X, E))))
+# Draw a sample whose sample covariance is exactly E (not just in expectation).
+make_exact_sample <- function(E, n = 50) {
+  p <- ncol(E)
+  Z <- matrix(stats::rnorm(n * p), n, p)
+  Z <- qr.Q(qr(scale(Z, center = TRUE, scale = FALSE))) * sqrt(n - 1)
+  Z %*% chol(E)
+}
+
+test_that("cholesky_decorrelate whitens a sample with known covariance", {
+  set.seed(2)
+  E <- matrix(c(2, 0.6, 0.6, 1.5), nrow = 2)
+  X <- make_exact_sample(E)
+  expect_equal(cov(X), E, tolerance = 1e-12)
+
+  Y <- cholesky_decorrelate(X, E, center = TRUE)
+  expect_equal(cov(Y), diag(2), tolerance = 1e-10)
+  expect_equal(unname(colMeans(Y)), c(0, 0), tolerance = 1e-10)
+})
+
+test_that("cholesky_decorrelate restores column means when center = FALSE", {
+  set.seed(3)
+  E <- matrix(c(2, 0.6, 0.6, 1.5), nrow = 2)
+  X <- make_exact_sample(E)
+
+  Y <- cholesky_decorrelate(X, E)
+  expect_equal(unname(colMeans(Y)), unname(colMeans(X)), tolerance = 1e-10)
+  # a location shift must not change the covariance
+  expect_equal(cov(Y), diag(2), tolerance = 1e-10)
+})
+
+test_that("cholesky_decorrelate scales columns for a diagonal covariance", {
+  set.seed(4)
+  E <- diag(c(4, 9))
+  X <- make_exact_sample(E)
+
+  Y <- cholesky_decorrelate(X, E, center = TRUE)
+  expect_equal(Y, sweep(X, 2, c(2, 3), "/"), tolerance = 1e-10)
+})
+
+test_that("cholesky_decorrelate validates its input", {
+  X <- matrix(stats::rnorm(20), nrow = 10, ncol = 2)
+  E <- diag(2)
+
+  expect_error(
+    cholesky_decorrelate(matrix(letters[1:4], 2, 2), E),
+    "is.numeric\\(x\\)"
+  )
+  expect_error(
+    cholesky_decorrelate(X, matrix(letters[1:4], 2, 2)),
+    "is.numeric\\(E\\)"
+  )
+  expect_error(cholesky_decorrelate(stats::rnorm(4), E),
+               "array of at least two dimensions")
+  expect_error(cholesky_decorrelate(matrix(stats::rnorm(2), 1, 2), E),
+               "dim\\(x\\) > 1")
+  expect_error(cholesky_decorrelate(X, matrix(1:6, 2, 3)), "square")
+  expect_error(cholesky_decorrelate(X, matrix(c(1, 2, 2, 1), 2)),
+               "leading minor")
+  expect_error(cholesky_decorrelate(X, diag(3)), "non-conformable")
+  expect_error(cholesky_decorrelate(X, diag(c(0, 1))), "diag\\(E\\) > 0")
+
+  X_na <- X
+  X_na[1, 1] <- NA
+  expect_error(cholesky_decorrelate(X_na, E), "is.na\\(x\\)")
+
+  E_na <- E
+  E_na[1, 1] <- NA
+  expect_error(cholesky_decorrelate(X, E_na), "is.na\\(E\\)")
+
+  expect_error(cholesky_decorrelate(X, E, center = NA), "missing value")
+})
 
 test_that("corr_ci_autocorr returns a list with expected names", {
   set.seed(1)
