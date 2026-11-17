@@ -39,7 +39,7 @@ library(rventures)
 library(MASS)
 
 # Define mean vector and positive-definite covariance matrix
-mu <- c(0, 5)
+mu <- c(8, 5)
 sigma <- matrix(c(2, 1.9, 
                   1.9, 2), nrow = 2)
 
@@ -70,18 +70,19 @@ cholesky_decorrelate <- function(x, E, center = F) {
   # Validate: type, length, missing values, empty input.
   stopifnot(is.numeric(x))
   stopifnot(is.numeric(E))
-  stopifnot(all(dim(E) == length(x)))
-  stopifnot(is.vector(x))
+  #stopifnot(all(dim(E) == length(x)))
+  #stopifnot(is.vector(x))
   # whitening operations need centered data
-  mu <- mean(x)
+  #mu <- colMeans(x)
   # invert the matrix
   E_inv <- solve(E)
   # cholesky decomposition
   W = chol(E_inv)
   # transpose decomposed matrix
+  # t(W) %*% W %*% E gives the identity matrix
   Wt <- t(W)
   # decorrelation
-  y = Wt %*% (x - mu)
+  y = Wt %*% (scale(x, center = T, scale = F)[1:nrow(X)])
   y <- as.vector(y)
   # Return decorrelated values with or without mean
   if(!center){
@@ -91,7 +92,9 @@ cholesky_decorrelate <- function(x, E, center = F) {
   }
 }
 
+cholesky_decorrelate(X, sigma)
 
+# test that data is decorrelated
 for(i in 1:nrow(X)){
   z <- cholesky_decorrelate(X[i,], sigma)
   points(z[1], z[2], pch = 16)
