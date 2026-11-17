@@ -83,6 +83,7 @@ cholesky_decorrelate <- function(x, E, center = F) {
   Wt <- t(W)
   # decorrelation
   y = sweep(x, 2, mu, "-") %*% Wt
+  Wt %*% x
   #y <- as.vector(y)
   # Return decorrelated values with or without mean
   if(!center){
@@ -92,13 +93,37 @@ cholesky_decorrelate <- function(x, E, center = F) {
   }
 }
 
-
 # compare correlated and uncorrelated data
 plot(x)
 points(cholesky_decorrelate(x, E, center = F), pch = 16)
-  
-# test that data is decorrelated
 
+cholesky_decorrelate_2 <- function(x, E, center = F) {
+  # Validate: type, length, missing values, empty input.
+  stopifnot(is.numeric(x))
+  stopifnot(is.numeric(E))
+  #stopifnot(all(dim(E) == length(x)))
+  #stopifnot(is.vector(x))
+  # whitening operations need centered data
+  mu <- mean(x)
+  # invert the matrix
+  E_inv <- solve(E)
+  # cholesky decomposition
+  W = chol(E_inv)
+  # transpose decomposed matrix
+  # t(W) %*% W %*% E gives the identity matrix
+  Wt <- t(W)
+  # decorrelation
+  y = Wt %*% matrix(x - mu, ncol = 1)
+  y <- as.vector(y)
+  # Return decorrelated values with or without mean
+  if(!center){
+    return(y+mu)  
+  } else{
+    return(y)
+  }
+}
+
+cholesky_decorrelate_2(x[1,], E, center = F)
 
 ```
 
