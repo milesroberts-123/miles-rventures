@@ -46,7 +46,7 @@ E <- matrix(c(2, 1.9,
 # Generate 100 random samples
 x <- mvrnorm(n = 100, mu = mu, Sigma = sigma)
 
-plot(x)
+
 ```
 
 \newpage
@@ -59,7 +59,7 @@ plot(x)
 #' I grabbed the definition from here: https://en.wikipedia.org/wiki/Whitening_transformation#Definition
 #' the code: NA handling, recycling, warnings, side effects.
 #'
-#' @param x vector of values to de-correlate
+#' @param x matrix of variables to decorrelate
 #' @param E variance covariance matrix of vector elements, should be a square matrix
 #' @param center default is FALSE, whether to undo the centering of X (subtraction by mean), before returning
 #' @return vector of decorrelated 
@@ -73,7 +73,7 @@ cholesky_decorrelate <- function(x, E, center = F) {
   #stopifnot(all(dim(E) == length(x)))
   #stopifnot(is.vector(x))
   # whitening operations need centered data
-  #mu <- colMeans(x)
+  mu <- colMeans(x)
   # invert the matrix
   E_inv <- solve(E)
   # cholesky decomposition
@@ -82,19 +82,20 @@ cholesky_decorrelate <- function(x, E, center = F) {
   # t(W) %*% W %*% E gives the identity matrix
   Wt <- t(W)
   # decorrelation
-  y = (scale(x, center = T, scale = F)[1:nrow(x),]) %*% Wt
+  y = sweep(x, 2, mu, "-") %*% Wt
   #y <- as.vector(y)
   # Return decorrelated values with or without mean
   if(!center){
-    return(y + mu)  
+    return(sweep(y, 2, mu, "+"))  
   } else{
     return(y)
   }
 }
 
-cholesky_decorrelate(x, E)
 
-  points(cholesky_decorrelate(x, E, center = F), pch = 16)
+# compare correlated and uncorrelated data
+plot(x)
+points(cholesky_decorrelate(x, E, center = F), pch = 16)
   
 # test that data is decorrelated
 
