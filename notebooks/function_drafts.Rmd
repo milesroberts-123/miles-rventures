@@ -29,10 +29,24 @@ knitr::opts_chunk$set(
 
 ```{r load-package, eval=FALSE}
 # Load a package already installed from this repo
-# library(rventures)
+library(rventures)
 
 # ...or load the working tree without reinstalling (adjust the path)
 # pkgload::load_all("~/moi_lab_projects/miles-rventures")
+```
+
+```{r}
+library(MASS)
+
+# Define mean vector and positive-definite covariance matrix
+mu <- c(0, 5)
+sigma <- matrix(c(2, 1.9, 
+                  1.9, 2), nrow = 2)
+
+# Generate 100 random samples
+X <- mvrnorm(n = 100, mu = mu, Sigma = sigma)
+
+plot(X)
 ```
 
 \newpage
@@ -40,21 +54,49 @@ knitr::opts_chunk$set(
 ## Draft 1
 
 ```{r draft-1}
-#' One-line title
+#' Decorrelate vector by cholesky decomposition
 #'
-#' What the function does, and any behaviour a reader would not guess from
+#' I grabbed the definition from here: https://en.wikipedia.org/wiki/Whitening_transformation#Definition
 #' the code: NA handling, recycling, warnings, side effects.
 #'
-#' @param x Describe each argument: type, shape, and what values are valid.
-#' @return What comes back, including its type and length.
+#' @param x vector of values to de-correlate
+#' @param E variance covariance matrix of vector elements, should be a square matrix
+#' @param center default is FALSE, whether to undo the centering of X (subtraction by mean), before returning
+#' @return vector of decorrelated 
 #' @export
 #' @examples
-#' draft_fn(1:3)
-draft_fn <- function(x) {
-  # 1. Validate: type, length, missing values, empty input.
-  # 2. Do the work.
-  # 3. Return one clearly shaped object.
+#' cholesky_decorrelate(c(0,5), matrix(c(2, 0.3, 0.3, 2.3), nrow = 2))
+cholesky_decorrelate <- function(x, E, center = F) {
+  # Validate: type, length, missing values, empty input.
+  stopifnot(is.numeric(x))
+  stopifnot(is.numeric(E))
+  stopifnot(all(dim(E) == length(x)))
+  stopifnot(is.vector(x))
+  # whitening operations need centered data
+  mu <- mean(x)
+  # invert the matrix
+  E_inv <- solve(E)
+  # cholesky decomposition
+  W = chol(E_inv)
+  # transpose decomposed matrix
+  Wt <- t(W)
+  # decorrelation
+  y = Wt %*% (x - mu)
+  y <- as.vector(y)
+  # Return decorrelated values with or without mean
+  if(!center){
+    return(y + mu)  
+  } else{
+    return(y)
+  }
 }
+
+
+for(i in 1:nrow(X)){
+  z <- cholesky_decorrelate(X[i,], sigma)
+  points(z[1], z[2], pch = 16)
+}
+
 ```
 
 ```{r draft-1-checks, eval=FALSE}
@@ -69,77 +111,6 @@ stopifnot(identical(draft_fn(1:3), c(2, 4, 6)))
 # - degenerate stats:   draft_fn(rep(5, 10))  # zero variance
 ```
 
-\newpage
-
-## Draft 2
-
-```{r draft-2}
-#' One-line title
-#'
-#' Description.
-#'
-#' @param x Description.
-#' @return Description.
-#' @export
-#' @examples
-#' draft_fn2(1:3)
-draft_fn2 <- function(x) {
-  # Validate, work, return.
-}
-```
-
-```{r draft-2-checks, eval=FALSE}
-stopifnot(identical(draft_fn2(1:3), ...))
-```
-
-\newpage
-
-## Draft 3
-
-```{r draft-3}
-#' One-line title
-#'
-#' Description.
-#'
-#' @param x Description.
-#' @return Description.
-#' @export
-#' @examples
-#' draft_fn3(1:3)
-draft_fn3 <- function(x) {
-  # Validate, work, return.
-}
-```
-
-```{r draft-3-checks, eval=FALSE}
-stopifnot(identical(draft_fn3(1:3), ...))
-```
-
-\newpage
-
-## Scratch data
-
-```{r scratch-data, eval=FALSE}
-set.seed(1)
-dat <- data.frame(
-  x = rnorm(100),
-  y = rnorm(100)
-)
-```
-
-\newpage
-
-## Practice prompts
-
-Pick one and write it from scratch, no lookup. Each has a natural edge case.
-
-- Rolling mean of a numeric vector with a window width, `NA` when the window is incomplete.
-- Mode of a vector, with a documented rule for ties.
-- Safe division that returns `NA` instead of `Inf` when the denominator is zero.
-- Collapse a named list of data frames into one, adding a column with each element's name.
-- Given a numeric matrix, return the row and column of the largest absolute value.
-
-\newpage
 
 ## Promote to the package
 
