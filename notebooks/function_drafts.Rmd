@@ -40,13 +40,13 @@ library(MASS)
 
 # Define mean vector and positive-definite covariance matrix
 mu <- c(8, 5)
-sigma <- matrix(c(2, 1.9, 
+E <- matrix(c(2, 1.9, 
                   1.9, 2), nrow = 2)
 
 # Generate 100 random samples
-X <- mvrnorm(n = 100, mu = mu, Sigma = sigma)
+x <- mvrnorm(n = 100, mu = mu, Sigma = sigma)
 
-plot(X)
+plot(x)
 ```
 
 \newpage
@@ -82,8 +82,8 @@ cholesky_decorrelate <- function(x, E, center = F) {
   # t(W) %*% W %*% E gives the identity matrix
   Wt <- t(W)
   # decorrelation
-  y = Wt %*% (scale(x, center = T, scale = F)[1:nrow(X)])
-  y <- as.vector(y)
+  y = (scale(x, center = T, scale = F)[1:nrow(x),]) %*% Wt
+  #y <- as.vector(y)
   # Return decorrelated values with or without mean
   if(!center){
     return(y + mu)  
@@ -92,13 +92,12 @@ cholesky_decorrelate <- function(x, E, center = F) {
   }
 }
 
-cholesky_decorrelate(X, sigma)
+cholesky_decorrelate(x, E)
 
+  points(cholesky_decorrelate(x, E, center = F), pch = 16)
+  
 # test that data is decorrelated
-for(i in 1:nrow(X)){
-  z <- cholesky_decorrelate(X[i,], sigma)
-  points(z[1], z[2], pch = 16)
-}
+
 
 ```
 
