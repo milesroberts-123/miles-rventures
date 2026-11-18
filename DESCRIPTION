@@ -1,6 +1,6 @@
 Package: rventures
 Title: Convenience Functions for RStudio Projects
-Version: 3.1.0
+Version: 3.2.0
 Authors@R: person("Miles", "Roberts", email = "milesdroberts@gmail.com",
     role = c("aut", "cre"))
 Description: A collection of convenience functions for use across RStudio
@@ -26,4 +26,3 @@ Suggests:
     scico
 Config/testthat/edition: 3
 Config/roxygen2/version: 8.1.0
-RoxygenNote: 7.3.2

@@ -16,8 +16,8 @@ it already existed.
 }
 \description{
 Takes the path to a target file, extracts its folder portion with
-\code{\link[base:basename]{base::dirname()}}, and creates the full folder structure with
-\code{\link[base:files2]{base::dir.create()}} if it does not yet exist. Useful before writing
+\code{\link[base:dirname]{base::dirname()}}, and creates the full folder structure with
+\code{\link[base:dir.create]{base::dir.create()}} if it does not yet exist. Useful before writing
 outputs into a not-yet-existing nested directory.
 }
 \examples{

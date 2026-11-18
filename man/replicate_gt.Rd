@@ -2,8 +2,8 @@
 % Please edit documentation in R/popgen.R
 \name{replicate_gt}
 \alias{replicate_gt}
-\title{Replicate G(t): proportion of variance in allele frequency change due to
-shared selection pressure}
+\title{Replicate G(t): between-replicate covariance relative to within-replicate
+variance}
 \usage{
 replicate_gt(pdiff, rep_labels, time_labels)
 }
@@ -19,15 +19,26 @@ columns = replicate time series.}
 \value{
 A one-row data.frame with mean and total (raw, positive, absolute,
 and trace) within-replicate variances and between-replicate covariances,
-plus the counts of replicates (\code{n_var}) and replicate pairs
-(\code{n_covar}).
+the counts of replicates (\code{n_var}) and unordered replicate pairs
+(\code{n_covar}), and \code{G_R = total_covar / total_var} as the last column.
 }
 \description{
 Splits the covariance matrix of allele frequency changes into
 within-replicate variances and between-replicate covariances using the
 supplied replicate and time labels, and returns means and totals of each
-(raw, positive-only, and absolute-valued), for estimating the fraction of
-variance in allele frequency change attributable to shared selection.
+(raw, positive-only, and absolute-valued), plus the ratio \code{G_R}.
+}
+\details{
+The between-replicate terms only sum over changes at different time points:
+entries with equal \code{time_labels} are excluded. \code{G_R} therefore measures
+shared change across distinct intervals, not the full covariance of
+cumulative change. \code{G_R = total_covar / total_var} is not bounded to
+\verb{[0, 1]} and is \code{NA} when \code{total_var} is zero.
+
+\code{total_covar} includes both directions of every replicate pair and every
+time pair. \code{mean_covar} is the mean per unordered replicate pair of the
+cross-time covariance sum, i.e. \code{total_covar / (n_var * (n_var - 1))};
+\code{mean_covar_pos} and \code{mean_covar_abs} use the same divisor.
 }
 \examples{
 set.seed(1)

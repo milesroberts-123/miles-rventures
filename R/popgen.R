@@ -1426,14 +1426,24 @@ conv_cor_btwn_envs <- function(pdiff_a, pdiff_b) {
   c(numer = mean(cov_ab[keep]), denom = mean(denom_mat[keep]))
 }
 
-#' Replicate G(t): proportion of variance in allele frequency change due to
-#' shared selection pressure
+#' Replicate G(t): between-replicate covariance relative to within-replicate
+#' variance
 #'
 #' Splits the covariance matrix of allele frequency changes into
 #' within-replicate variances and between-replicate covariances using the
 #' supplied replicate and time labels, and returns means and totals of each
-#' (raw, positive-only, and absolute-valued), for estimating the fraction of
-#' variance in allele frequency change attributable to shared selection.
+#' (raw, positive-only, and absolute-valued), plus the ratio `G_R`.
+#'
+#' The between-replicate terms only sum over changes at different time points:
+#' entries with equal `time_labels` are excluded. `G_R` therefore measures
+#' shared change across distinct intervals, not the full covariance of
+#' cumulative change. `G_R = total_covar / total_var` is not bounded to
+#' `[0, 1]` and is `NA` when `total_var` is zero.
+#'
+#' `total_covar` includes both directions of every replicate pair and every
+#' time pair. `mean_covar` is the mean per unordered replicate pair of the
+#' cross-time covariance sum, i.e. `total_covar / (n_var * (n_var - 1))`;
+#' `mean_covar_pos` and `mean_covar_abs` use the same divisor.
 #'
 #' @param pdiff Numeric matrix of allele frequency changes, rows = variants,
 #'   columns = replicate time series.
@@ -1443,8 +1453,8 @@ conv_cor_btwn_envs <- function(pdiff_a, pdiff_b) {
 #'
 #' @return A one-row data.frame with mean and total (raw, positive, absolute,
 #'   and trace) within-replicate variances and between-replicate covariances,
-#'   plus the counts of replicates (`n_var`) and replicate pairs
-#'   (`n_covar`).
+#'   the counts of replicates (`n_var`) and unordered replicate pairs
+#'   (`n_covar`), and `G_R = total_covar / total_var` as the last column.
 #' @export
 #'
 #' @examples
@@ -1474,20 +1484,25 @@ replicate_gt <- function(pdiff, rep_labels, time_labels) {
   total_var_trace <- sum(var_trace)
   n_var <- length(unique(rep_labels))
 
-  # total covariance across different replicates AND time points
+  # total covariance across different replicates AND time points; equal-time
+  # entries are deliberately excluded
   cov_only_mat <- covmat[(!rep_eq_bool_mat) & (!time_eq_bool_mat)]
   total_covar <- sum(cov_only_mat)
   total_covar_abs <- sum(abs(cov_only_mat))
   total_covar_pos <- sum(cov_only_mat[(cov_only_mat > 0)])
   n_covar <- (n_var^2 - n_var) / 2
+  # total_covar counts both directions of each replicate pair, so the mean per
+  # unordered pair divides by the ordered pair count, not by n_covar
+  n_covar_ordered <- n_var * (n_var - 1L)
 
   mean_var <- total_var / n_var
   mean_var_pos <- total_var_pos / n_var
   mean_var_abs <- total_var_abs / n_var
   mean_var_trace <- total_var_trace / n_var
-  mean_covar <- total_covar / n_covar
-  mean_covar_pos <- total_covar_pos / n_covar
-  mean_covar_abs <- total_covar_abs / n_covar
+  mean_covar <- total_covar / n_covar_ordered
+  mean_covar_pos <- total_covar_pos / n_covar_ordered
+  mean_covar_abs <- total_covar_abs / n_covar_ordered
+  G_R <- if (total_var > 0) total_covar / total_var else NA_real_
 
   stopifnot(total_covar <= total_covar_pos,
             mean_covar <= mean_covar_pos,
@@ -1518,7 +1533,8 @@ replicate_gt <- function(pdiff, rep_labels, time_labels) {
     total_covar_pos = total_covar_pos,
     total_covar_abs = total_covar_abs,
     n_var = n_var,
-    n_covar = n_covar
+    n_covar = n_covar,
+    G_R = G_R
   ))
 }
 

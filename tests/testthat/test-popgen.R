@@ -964,6 +964,7 @@ test_that("replicate_gt correctly scales denominator of expectation with replica
   result <- replicate_gt(pdiff, rep_labels, time_labels)
   expect_equal(result$n_covar, 10)
   expect_equal(result$n_var, 5)
+  expect_equal(result$mean_covar, result$total_covar / (5 * 4))
 })
 
 test_that("replicate_gt hand-computed 2x2 partition", {
@@ -974,6 +975,48 @@ test_that("replicate_gt hand-computed 2x2 partition", {
   expect_equal(res$n_covar, 1)
   expect_equal(res$total_var, sum(diag(stats::cov(pdiff))))
   expect_equal(res$total_covar, 2 * stats::cov(pdiff)[1, 2])
+  expect_equal(res$mean_covar, stats::cov(pdiff)[1, 2])
+  expect_equal(res$G_R, res$total_covar / res$total_var)
+})
+
+test_that("replicate_gt means divide the ordered sums by the ordered pair count", {
+  set.seed(7)
+  pdiff <- matrix(rnorm(40 * 12), nrow = 40, ncol = 12)
+  rep_labels <- rep(1:4, each = 3)
+  time_labels <- rep(1:3, times = 4)
+  res <- replicate_gt(pdiff, rep_labels, time_labels)
+
+  expect_equal(res$n_var, 4)
+  expect_equal(res$n_covar, 6)
+  expect_equal(res$mean_covar, res$total_covar / 12)
+  expect_equal(res$mean_covar_pos, res$total_covar_pos / 12)
+  expect_equal(res$mean_covar_abs, res$total_covar_abs / 12)
+  expect_equal(res$G_R, res$total_covar / res$total_var)
+  expect_equal(res$G_R, (res$n_var - 1) * res$mean_covar / res$mean_var)
+})
+
+test_that("replicate_gt excludes same-time cross-replicate covariance from G_R", {
+  set.seed(6)
+  n <- 100
+  x <- rnorm(n)
+  x <- x - mean(x)
+  y <- rnorm(n)
+  y <- y - mean(y)
+  y <- y - sum(x * y) / sum(x^2) * x
+
+  # columns: replicate 1 at times 1 and 2, replicate 2 at times 1 and 2
+  pdiff <- cbind(x, y, x, y)
+  res <- replicate_gt(
+    pdiff,
+    rep_labels = c(1, 1, 2, 2),
+    time_labels = c(1, 2, 1, 2)
+  )
+  covmat <- stats::cov(pdiff)
+
+  # same-time cross-replicate covariance is positive but deliberately excluded
+  expect_gt(covmat[1, 3] + covmat[2, 4], 0)
+  expect_equal(res$total_covar, 0, tolerance = 1e-12)
+  expect_equal(res$G_R, 0, tolerance = 1e-12)
 })
 
 test_that("replicate_gt validates labels", {

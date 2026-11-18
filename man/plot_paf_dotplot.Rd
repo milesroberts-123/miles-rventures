@@ -33,7 +33,7 @@ plot_paf_dotplot(
 \item{min_mapq}{Minimum mapping quality to plot (default 1).}
 }
 \value{
-A ggplot object. Add highlights (e.g. \code{\link[ggplot2:geom_abline]{ggplot2::geom_hline()}}) and
+A ggplot object. Add highlights (e.g. \code{\link[ggplot2:geom_hline]{ggplot2::geom_hline()}}) and
 save it with \code{\link[=save_plot]{save_plot()}}.
 }
 \description{
