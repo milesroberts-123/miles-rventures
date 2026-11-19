@@ -52,7 +52,7 @@ X <- mvrnorm(n = 100, mu = mu, Sigma = E)
 
 ## Cholesky decomposition
 
-```{r draft-1}
+```{r cholesky_decomposition}
 #' Decorrelate vector by cholesky decomposition
 #'
 #' I grabbed the definition from here: https://en.wikipedia.org/wiki/Whitening_transformation#Definition
@@ -103,7 +103,7 @@ plot(X)
 points(cholesky_decorrelate(X, E, center = F), pch = 16)
 ```
 
-```{r draft-1-checks, eval=FALSE}
+```{r cholesky_decomposition_checks, eval=FALSE}
 # Happy path: exact expected values, not just "it ran".
 # identity matrix does does nothing
 stopifnot(all( (cholesky_decorrelate(X, E) - X) < 1e-16))
@@ -118,6 +118,52 @@ stopifnot(all(dim(X) == dim(cholesky_decorrelate(X, E))))
 # - degenerate stats:   draft_fn(rep(5, 10))  # zero variance
 ```
 
+```{r wright_s_estim}
+
+#' Estimate selection coefficient assuming wright fisher population and constant selection
+#' Equation is from: https://doi.org/10.1534/genetics.112.147611
+#' @param x vector of >=2 allele frequencies, all in (0,1), 
+#'
+#' @return selection coefficient estimate
+#' @export
+#'
+#' @examples
+#' wright_s_estim(c(0.5, 0.51, 0.52))
+wright_s_estim <- function(x){
+  stopifnot(length(x)>=2, all(x > 0), all(x < 1), all(!is.na(x)), is.numeric(x))
+  f_T <- x[length(x)]
+  f_0 <- x[1]
+  
+  f_noT <- x[1:(length(x) - 1)]
+  
+  s <- (f_T-f_0)/sum(f_noT*(1-f_noT))
+  
+  return(s)
+}
+
+```
+
+
+```{r wright_s_estim_checks, eval=FALSE}
+# positive coefficient for increasing frequency
+stopifnot(wright_s_estim(c(0.5, 0.51, 0.52)) > 0)
+
+# negative coefficient for decreasing frequency
+stopifnot(wright_s_estim(c(0.5, 0.49, 0.48)) < 0)
+
+# zero coefficient for no change
+stopifnot(wright_s_estim(c(0.5, 0.49, 0.5)) == 0)
+
+# symmetry check
+stopifnot(wright_s_estim(c(0.5, 0.49, 0.48))*-1 == wright_s_estim(c(0.5, 0.51, 0.52)))
+
+# Edges worth covering for almost any function:
+# - empty input:        draft_fn(numeric(0))
+# - missing values:     draft_fn(c(1, NA, 3))
+# - wrong type:         testthat::expect_error(draft_fn("x"), "numeric")
+# - length one:         draft_fn(1)
+# - degenerate stats:   draft_fn(rep(5, 10))  # zero variance
+```
 
 ## Promote to the package
 

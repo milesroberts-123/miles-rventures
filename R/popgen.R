@@ -1,3 +1,25 @@
+#' Estimate selection coefficient assuming wright fisher population and constant selection
+#' Equation is from: https://doi.org/10.1534/genetics.112.147611
+#' @param x vector of >=2 allele frequencies, all in (0,1), 
+#'
+#' @return selection coefficient estimate
+#' @export
+#'
+#' @examples
+#' wright_s_estim(c(0.5, 0.51, 0.52))
+wright_s_estim <- function(x){
+	  stopifnot(length(x)>=2, all(x > 0), all(x < 1), all(!is.na(x)), is.numeric(x))
+  f_T <- x[length(x)]
+    f_0 <- x[1]
+    
+    f_noT <- x[1:(length(x) - 1)]
+      
+      s <- (f_T-f_0)/sum(f_noT*(1-f_noT))
+      
+      return(s)
+}
+
+
 #' Allele frequency after one generation of selection
 #'
 #' Computes the frequency of allele A after one generation of selection at a

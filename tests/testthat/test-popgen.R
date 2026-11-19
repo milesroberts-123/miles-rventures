@@ -1,3 +1,19 @@
+test_that("wright_s_estim gives symmetric answers", {
+  expect_equal(wright_s_estim(c(0.5, 0.49, 0.48))*-1, wright_s_estim(c(0.5, 0.51, 0.52)))
+})
+
+test_that("wright_s_estim gives positive s for increasing frequency", {
+  expect_true(wright_s_estim(c(0.5, 0.51, 0.52)) > 0)
+})
+
+test_that("wright_s_estim gives negative s for decreasing frequency", {
+  expect_true(wright_s_estim(c(0.5, 0.49, 0.48)) < 0)
+})
+
+test_that("wright_s_estim give zero s for no change", {
+  expect_true(wright_s_estim(c(0.5, 0.49, 0.5)) == 0)
+})
+
 test_that("fitfreq returns q unchanged when s = 0", {
   expect_equal(fitfreq(q = 0.3, h = 0.5, s = 0), 0.3)
 })
