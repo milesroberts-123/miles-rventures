@@ -169,6 +169,70 @@ test_that("plot_manhattan computes cumulative positions across chromosomes", {
   )
 })
 
+test_that("plot_manhattan plots signed effects without log transformation", {
+  skip_if_not_installed("ggplot2")
+  snp <- make_test_snp_table()[, c("CHROM", "POS")]
+  snp$effect <- c(-0.2, -0.1, 0.05, 0, 0.1, -0.05, 0.2, 0.3, -0.4, 0.15)
+
+  p <- plot_manhattan(snp, plot_effects = TRUE, effect_col = "effect")
+  expected <- snp$effect[order(snp$CHROM, snp$POS)]
+
+  expect_s3_class(p, "ggplot")
+  expect_equal(p$data$y_plot, expected)
+  expect_equal(p$labels$y, "Effect size")
+  expect_true(min(ggplot2::ggplot_build(p)$data[[1]]$y) < 0)
+})
+
+test_that("plot_manhattan keeps the p-value y axis by default", {
+  skip_if_not_installed("ggplot2")
+  snp <- make_test_snp_table()
+  p <- plot_manhattan(snp)
+  expect_equal(p$labels$y, "-log10(p)")
+  expect_equal(p$data$y_plot, -log10(snp$pvalue))
+})
+
+test_that("plot_manhattan highlights effect points with the effect y variable", {
+  skip_if_not_installed("ggplot2")
+  snp <- make_test_snp_table()[, c("CHROM", "POS")]
+  snp$effect <- c(-0.2, -0.1, 0.05, 0, 0.1, -0.05, 0.2, 0.3, -0.4, 0.15)
+  snp$highlight <- c(rep("no", 9), "yes")
+
+  p_h <- plot_manhattan(snp, plot_effects = TRUE, effect_col = "effect")
+  expect_identical(length(p_h$layers), 2L)
+  expect_equal(p_h$layers[[2]]$data$y_plot, 0.15)
+})
+
+test_that("plot_manhattan validates effect mode arguments", {
+  skip_if_not_installed("ggplot2")
+  expect_error(
+    plot_manhattan(make_test_snp_table(), plot_effects = TRUE),
+    "effect_col"
+  )
+  expect_error(
+    plot_manhattan(make_test_snp_table(), plot_effects = "yes"),
+    "plot_effects"
+  )
+  expect_error(
+    plot_manhattan(make_test_snp_table(), plot_effects = NA),
+    "plot_effects"
+  )
+  expect_error(
+    plot_manhattan(
+      make_test_snp_table(),
+      plot_effects = TRUE,
+      effect_col = "missing"
+    ),
+    "Missing required column"
+  )
+
+  snp <- make_test_snp_table()[, c("CHROM", "POS")]
+  snp$effect <- as.character(1:10)
+  expect_error(
+    plot_manhattan(snp, plot_effects = TRUE, effect_col = "effect"),
+    "must be numeric"
+  )
+})
+
 test_that("plot_manhattan adds an orange highlight layer only when the column exists", {
   skip_if_not_installed("ggplot2")
   p <- plot_manhattan(make_test_snp_table())

@@ -227,22 +227,29 @@ plot_paf_dotplot <- function(paf, q_seq, t_seq, xlab, ylab, title,
 #'
 #' Plots a Manhattan plot from a table of SNP associations: cumulative
 #' genomic position on the x axis (`BPcum`, computed across chromosomes in
-#' the order they appear in `CHROM`), `-log10(pvalue)` on the y axis, and
-#' alternating grey/black points per chromosome. Chromosome labels are drawn
-#' at each chromosome's center. SNPs with `highlight == "yes"` (if the column
-#' is present) are overplotted in orange.
+#' the order they appear in `CHROM`), and either `-log10(pvalue)` or a signed
+#' effect-size column on the y axis. Points alternate grey/black per
+#' chromosome and chromosome labels are drawn at each chromosome's center.
+#' SNPs with `highlight == "yes"` (if the column is present) are overplotted
+#' in orange.
 #'
 #' @param data A data frame (or tibble) with columns `CHROM`, `POS`, and
-#'   `pvalue`. An optional `highlight` column (`"yes"` marks points to
+#'   either `pvalue` (p-value mode) or the column named by `effect_col`
+#'   (effect mode). An optional `highlight` column (`"yes"` marks points to
 #'   overplot in `highlight_color`) is used if present.
 #' @param xlab X-axis label (default `"Chromosome"`).
-#' @param ylab Y-axis label (default `"-log10(p)"`).
+#' @param ylab Y-axis label. Defaults to `"-log10(p)"` in p-value mode and
+#'   `"Effect size"` in effect mode.
 #' @param title Plot title.
 #' @param point_colors Character vector of colors to cycle through the
 #'   chromosomes (default `c("grey", "black")`). A single color gives all
 #'   chromosomes the same color.
 #' @param highlight_color Single color for the `highlight == "yes"`
 #'   overplotted points (default `"orange"`).
+#' @param plot_effects Logical, default `FALSE`. If `TRUE`, plot
+#'   `effect_col` directly on a linear y axis instead of `-log10(pvalue)`.
+#' @param effect_col Name of the numeric effect-size column to plot when
+#'   `plot_effects = TRUE`. Required in that mode and ignored otherwise.
 #'
 #' @return A ggplot object. Save it with [save_plot()].
 #' @export
@@ -254,11 +261,36 @@ plot_paf_dotplot <- function(paf, q_seq, t_seq, xlab, ylab, title,
 #'   pvalue = runif(1500, 1e-8, 1)
 #' )
 #' plot_manhattan(snp_table, title = "Demo Manhattan plot")
-plot_manhattan <- function(data, xlab = "Chromosome", ylab = "-log10(p)",
+#'
+#' snp_table$effect <- runif(nrow(snp_table), -0.2, 0.2)
+#' plot_manhattan(
+#'   snp_table,
+#'   plot_effects = TRUE,
+#'   effect_col = "effect",
+#'   title = "Signed effect sizes"
+#' )
+plot_manhattan <- function(data, xlab = "Chromosome", ylab = NULL,
                            title = NULL,
                            point_colors = c("grey", "black"),
-                           highlight_color = "orange") {
-  required_cols <- c("CHROM", "POS", "pvalue")
+                           highlight_color = "orange",
+                           plot_effects = FALSE, effect_col = NULL) {
+  if (!is.logical(plot_effects) || length(plot_effects) != 1L ||
+        is.na(plot_effects)) {
+    stop("plot_effects must be a single TRUE or FALSE.")
+  }
+  if (plot_effects) {
+    if (!is.character(effect_col) || length(effect_col) != 1L ||
+          is.na(effect_col)) {
+      stop("effect_col must be a single column name when plot_effects = TRUE.")
+    }
+  }
+
+  required_cols <- c("CHROM", "POS")
+  if (plot_effects) {
+    required_cols <- c(required_cols, effect_col)
+  } else {
+    required_cols <- c(required_cols, "pvalue")
+  }
   missing_cols <- setdiff(required_cols, names(data))
   if (length(missing_cols) > 0) {
     stop("Missing required column(s): ", paste(missing_cols, collapse = ", "), ".")
@@ -266,11 +298,17 @@ plot_manhattan <- function(data, xlab = "Chromosome", ylab = "-log10(p)",
   if (nrow(data) == 0) {
     stop("No SNPs in 'data'.")
   }
+  if (plot_effects && !is.numeric(data[[effect_col]])) {
+    stop("'", effect_col, "' must be numeric when plot_effects = TRUE.")
+  }
   if (!is.character(point_colors) || length(point_colors) == 0) {
     stop("point_colors must be a non-empty character vector of colors.")
   }
   if (!is.character(highlight_color) || length(highlight_color) != 1) {
     stop("highlight_color must be a single color name.")
+  }
+  if (is.null(ylab)) {
+    ylab <- if (plot_effects) "Effect size" else "-log10(p)"
   }
 
   # Cumulative base-pair offset per chromosome, in order of first appearance
@@ -288,6 +326,8 @@ plot_manhattan <- function(data, xlab = "Chromosome", ylab = "-log10(p)",
   )
   don$BPcum <- don$POS + don$tot
   don$tot <- NULL
+  don$y_plot <- if (plot_effects) don[[effect_col]] else -log10(don$pvalue)
+  y_expand <- if (plot_effects) c(0.05, 0.05) else c(0, 0)
 
   axisdf <- dplyr::summarise(
     dplyr::group_by(don, CHROM),
@@ -298,7 +338,7 @@ plot_manhattan <- function(data, xlab = "Chromosome", ylab = "-log10(p)",
   p <- ggplot2::ggplot(don) +
     ggplot2::geom_point(
       ggplot2::aes(
-        x = BPcum, y = -log10(pvalue),
+        x = BPcum, y = y_plot,
         color = as.factor(CHROM)
       ),
       alpha = 0.8, size = 1.3, shape = 16
@@ -310,7 +350,7 @@ plot_manhattan <- function(data, xlab = "Chromosome", ylab = "-log10(p)",
       breaks = axisdf$center,
       labels = axisdf$CHROM
     ) +
-    ggplot2::scale_y_continuous(expand = c(0, 0)) +
+    ggplot2::scale_y_continuous(expand = y_expand) +
     ggplot2::theme(
       legend.position = "none",
       panel.border = ggplot2::element_blank(),
@@ -322,7 +362,7 @@ plot_manhattan <- function(data, xlab = "Chromosome", ylab = "-log10(p)",
   if ("highlight" %in% names(don)) {
     p <- p + ggplot2::geom_point(
       data = dplyr::filter(don, highlight == "yes"),
-      ggplot2::aes(x = BPcum, y = -log10(pvalue)),
+      ggplot2::aes(x = BPcum, y = y_plot),
       color = highlight_color, size = 1.5, shape = 16
     )
   }

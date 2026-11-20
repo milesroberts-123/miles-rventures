@@ -75,7 +75,7 @@ library(rventures)
 - `save_plot()` — save a ggplot as PDF/PNG with by-date/by-analysis symlinks
 - `save_plot_and_object()` — save a ggplot as an image plus its RDS object
 - `plot_groups_pdf()` — split a data frame by grouping columns and write one plot per group to a multi-page PDF
-- `plot_manhattan()` — GWAS Manhattan plot with per-chromosome x-axis and optional SNP highlighting
+- `plot_manhattan()` — GWAS Manhattan plot with per-chromosome x-axis, optional SNP highlighting, or signed effect sizes on a linear y axis
 - `plot_manhattan_by_site()` — per-site Manhattan plot saved under a by-date results path
 - `plot_pairs_heatmap()` — tiled heatmap of pre-melted pairwise statistics with a scico palette
 - `plot_paf_dotplot()` — dotplot of aligned feature (PAF) coordinates, query vs. target

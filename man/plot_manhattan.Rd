@@ -7,20 +7,24 @@
 plot_manhattan(
   data,
   xlab = "Chromosome",
-  ylab = "-log10(p)",
+  ylab = NULL,
   title = NULL,
   point_colors = c("grey", "black"),
-  highlight_color = "orange"
+  highlight_color = "orange",
+  plot_effects = FALSE,
+  effect_col = NULL
 )
 }
 \arguments{
 \item{data}{A data frame (or tibble) with columns \code{CHROM}, \code{POS}, and
-\code{pvalue}. An optional \code{highlight} column (\code{"yes"} marks points to
+either \code{pvalue} (p-value mode) or the column named by \code{effect_col}
+(effect mode). An optional \code{highlight} column (\code{"yes"} marks points to
 overplot in \code{highlight_color}) is used if present.}
 
 \item{xlab}{X-axis label (default \code{"Chromosome"}).}
 
-\item{ylab}{Y-axis label (default \code{"-log10(p)"}).}
+\item{ylab}{Y-axis label. Defaults to \code{"-log10(p)"} in p-value mode and
+\code{"Effect size"} in effect mode.}
 
 \item{title}{Plot title.}
 
@@ -30,6 +34,12 @@ chromosomes the same color.}
 
 \item{highlight_color}{Single color for the \code{highlight == "yes"}
 overplotted points (default \code{"orange"}).}
+
+\item{plot_effects}{Logical, default \code{FALSE}. If \code{TRUE}, plot
+\code{effect_col} directly on a linear y axis instead of \code{-log10(pvalue)}.}
+
+\item{effect_col}{Name of the numeric effect-size column to plot when
+\code{plot_effects = TRUE}. Required in that mode and ignored otherwise.}
 }
 \value{
 A ggplot object. Save it with \code{\link[=save_plot]{save_plot()}}.
@@ -37,10 +47,11 @@ A ggplot object. Save it with \code{\link[=save_plot]{save_plot()}}.
 \description{
 Plots a Manhattan plot from a table of SNP associations: cumulative
 genomic position on the x axis (\code{BPcum}, computed across chromosomes in
-the order they appear in \code{CHROM}), \code{-log10(pvalue)} on the y axis, and
-alternating grey/black points per chromosome. Chromosome labels are drawn
-at each chromosome's center. SNPs with \code{highlight == "yes"} (if the column
-is present) are overplotted in orange.
+the order they appear in \code{CHROM}), and either \code{-log10(pvalue)} or a signed
+effect-size column on the y axis. Points alternate grey/black per
+chromosome and chromosome labels are drawn at each chromosome's center.
+SNPs with \code{highlight == "yes"} (if the column is present) are overplotted
+in orange.
 }
 \examples{
 snp_table <- data.frame(
@@ -49,4 +60,12 @@ snp_table <- data.frame(
   pvalue = runif(1500, 1e-8, 1)
 )
 plot_manhattan(snp_table, title = "Demo Manhattan plot")
+
+snp_table$effect <- runif(nrow(snp_table), -0.2, 0.2)
+plot_manhattan(
+  snp_table,
+  plot_effects = TRUE,
+  effect_col = "effect",
+  title = "Signed effect sizes"
+)
 }
