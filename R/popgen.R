@@ -1,22 +1,80 @@
-#' Estimate selection coefficient assuming wright fisher population and constant selection
-#' Equation is from: https://doi.org/10.1534/genetics.112.147611
-#' @param x vector of >=2 allele frequencies, all in (0,1), 
+#' Estimate the selection coefficient from an allele-frequency time series
 #'
-#' @return selection coefficient estimate
+#' Implements the first-order approximation to the maximum-likelihood
+#' estimator of Mathieson and McVean (2013) for a diploid Wright-Fisher
+#' population with constant additive selection (`h = 0.5`). The estimate is
+#' returned on the same scale as [fitfreq()] and [WF_sel()]: the fitnesses of
+#' the three genotypes are `1`, `1 + h * s`, and `1 + s`, with `h = 0.5`.
+#'
+#' @param x Numeric vector of allele frequencies of the selected allele,
+#'   ordered from the first to the last time point. All values must lie
+#'   strictly between 0 and 1, with no missing values.
+#' @param dt Number of generations between consecutive entries of `x`,
+#'   default `1`. Must be positive.
+#'
+#' @details
+#' The estimator is
+#' \deqn{\hat{s} = \frac{2 (f_T - f_0)}
+#'   {dt \sum_{t=0}^{T-1} f_t (1 - f_t)}.}
+#' This is twice Equation 4 of Mathieson and McVean (2013), because their
+#' `s` is the excess fitness of the heterozygote (fitness `1 + s` for `Aa`
+#' and `1 + 2*s` for the selected homozygote), whereas [fitfreq()] and
+#' [WF_sel()] use the excess fitness of the selected homozygote (`1 + h*s`
+#' for `Aa` and `1 + s` for the selected homozygote).
+#'
+#' The estimator assumes a diploid population with additive selection,
+#' constant `s`, equal spacing of `dt` generations between samples, allele
+#' frequencies observed without sampling error, negligible drift, and
+#' small `|s|`; it is accurate to order `s^2`. The numerator uses only the
+#' first and last frequencies; intermediate frequencies enter only through
+#' the denominator. Non-monotonic trajectories violate the constant-selection
+#' model. For sampled or irregularly spaced data, use the hidden Markov model
+#' of Mathieson and McVean or [fit_af_glm()].
+#'
+#' For a haploid model, the same formula with `dt = 1` estimates twice the
+#' haploid selection coefficient; divide the result by 2.
+#'
+#' @return A single numeric value: the estimated selection coefficient per
+#'   generation on the scale of [fitfreq()] and [WF_sel()].
+#' @references
+#' Mathieson I, McVean G (2013). Estimating selection coefficients in
+#' spatially structured populations from time series data of allele
+#' frequencies. *Genetics* 193(3):973-984.
+#' \doi{10.1534/genetics.112.147611}
+#' @seealso [fitfreq()], [WF_sel()], [fit_af_glm()]
 #' @export
 #'
 #' @examples
 #' wright_s_estim(c(0.5, 0.51, 0.52))
-wright_s_estim <- function(x){
-	  stopifnot(length(x)>=2, all(x > 0), all(x < 1), all(!is.na(x)), is.numeric(x))
-  f_T <- x[length(x)]
-    f_0 <- x[1]
-    
-    f_noT <- x[1:(length(x) - 1)]
-      
-      s <- (f_T-f_0)/sum(f_noT*(1-f_noT))
-      
-      return(s)
+#' wright_s_estim(c(0.5, 0.51, 0.52), dt = 10)
+wright_s_estim <- function(x, dt = 1) {
+  if (!is.numeric(x) || !is.null(dim(x))) {
+    stop("'x' must be a numeric vector.")
+  }
+  if (length(x) < 2L) {
+    stop("'x' must contain at least two allele frequencies.")
+  }
+  if (anyNA(x)) {
+    stop("'x' must not contain missing values.")
+  }
+  if (any(!is.finite(x))) {
+    stop("'x' must contain finite allele frequencies.")
+  }
+  if (any(x <= 0 | x >= 1)) {
+    stop("'x' must lie strictly between 0 and 1.")
+  }
+  if (!is.numeric(dt) || length(dt) != 1L ||
+        !is.finite(dt) || dt <= 0) {
+    stop("'dt' must be a single positive number.")
+  }
+
+  f_noT <- x[-length(x)]
+  s <- 2 * (x[length(x)] - x[1]) / (dt * sum(f_noT * (1 - f_noT)))
+  if (abs(s) >= 1) {
+    warning("Estimated |s| >= 1; the first-order approximation may be unreliable.",
+            call. = FALSE)
+  }
+  s
 }
 
 

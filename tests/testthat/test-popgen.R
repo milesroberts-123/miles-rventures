@@ -1,17 +1,64 @@
 test_that("wright_s_estim gives symmetric answers", {
-  expect_equal(wright_s_estim(c(0.5, 0.49, 0.48))*-1, wright_s_estim(c(0.5, 0.51, 0.52)))
+  expect_equal(
+    wright_s_estim(c(0.5, 0.49, 0.48)),
+    -wright_s_estim(c(0.5, 0.51, 0.52))
+  )
 })
 
 test_that("wright_s_estim gives positive s for increasing frequency", {
-  expect_true(wright_s_estim(c(0.5, 0.51, 0.52)) > 0)
+  expect_gt(wright_s_estim(c(0.5, 0.51, 0.52)), 0)
 })
 
 test_that("wright_s_estim gives negative s for decreasing frequency", {
-  expect_true(wright_s_estim(c(0.5, 0.49, 0.48)) < 0)
+  expect_lt(wright_s_estim(c(0.5, 0.49, 0.48)), 0)
 })
 
-test_that("wright_s_estim give zero s for no change", {
-  expect_true(wright_s_estim(c(0.5, 0.49, 0.5)) == 0)
+test_that("wright_s_estim gives zero s for zero net change", {
+  expect_equal(wright_s_estim(c(0.5, 0.49, 0.5)), 0)
+  expect_equal(wright_s_estim(rep(0.5, 3)), 0)
+  expect_equal(wright_s_estim(c(0.5, 0.9, 0.5)), 0)
+})
+
+test_that("wright_s_estim matches the fitfreq selection coefficient scale", {
+  q <- numeric(50)
+  q[1] <- 0.1
+  for (i in 2:50) {
+    q[i] <- fitfreq(q[i - 1], h = 0.5, s = 0.01)
+  }
+  expect_equal(wright_s_estim(q), 0.01, tolerance = 1e-2)
+})
+
+test_that("wright_s_estim accounts for generations between samples", {
+  q <- numeric(50)
+  q[1] <- 0.1
+  for (i in 2:50) {
+    q[i] <- fitfreq(q[i - 1], h = 0.5, s = 0.01)
+  }
+  sampled <- q[seq(1, 50, by = 5)]
+  expect_equal(wright_s_estim(sampled, dt = 5), 0.01, tolerance = 1e-2)
+})
+
+test_that("wright_s_estim warns outside the small-s approximation", {
+  expect_warning(wright_s_estim(c(0.1, 0.2)), "unreliable")
+})
+
+test_that("wright_s_estim validates its inputs", {
+  expect_error(wright_s_estim("a"), "numeric vector")
+  expect_error(wright_s_estim(matrix(c(0.5, 0.6, 0.7, 0.8), 2)), "numeric vector")
+  expect_error(wright_s_estim(numeric(0)), "at least two")
+  expect_error(wright_s_estim(0.5), "at least two")
+  expect_error(wright_s_estim(c(0.5, NA)), "missing values")
+  expect_error(wright_s_estim(c(0.5, Inf)), "finite")
+  expect_error(wright_s_estim(c(0.5, 0)), "strictly between")
+  expect_error(wright_s_estim(c(0.5, 1)), "strictly between")
+  expect_error(wright_s_estim(c(0.5, 0.6), dt = 0), "positive")
+  expect_error(wright_s_estim(c(0.5, 0.6), dt = c(1, 2)), "positive")
+  expect_error(wright_s_estim(c(0.5, 0.6), dt = NA), "positive")
+  expect_error(wright_s_estim(c(0.5, 0.6), dt = "1"), "positive")
+})
+
+test_that("wright_s_estim is exported", {
+  expect_true("wright_s_estim" %in% getNamespaceExports("rventures"))
 })
 
 test_that("fitfreq returns q unchanged when s = 0", {

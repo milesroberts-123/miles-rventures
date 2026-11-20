@@ -116,6 +116,7 @@ library(rventures)
 - `replicate_gt()` — variance/covariance partition and `G_R` (cross-time between-replicate covariance over within-replicate variance) by replicate and time labels
 - `conv_cor_bw_pop()` — convergence correlation between a pair of populations: mean standardized covariance of their replicate increments (formerly `covmat_pop_pair`)
 - `feder_t_test()` — Feder-style one-sample t-test of standardized allele-frequency changes, pooled across time points and replicates per population
+- `wright_s_estim()` — first-order selection-coefficient estimate from an allele-frequency time series, on the `fitfreq()`/`WF_sel()` scale
 - `fit_af_glm()` — quasibinomial GLM of allele frequency over time, with optional shared-baseline observation and fixed-intercept offset
 - `sum_of_het_by_t()` — summed heterozygosity per time point, with labels extracted from column names
 - `estim_linked_selection_params()`, `estim_linked_selection_params_new()` — Buffalo & Coop (2019) linked-selection window tables (raw and heterozygosity-standardized)
