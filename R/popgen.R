@@ -11,6 +11,12 @@
 #'   strictly between 0 and 1, with no missing values.
 #' @param dt Number of generations between consecutive entries of `x`,
 #'   default `1`. Must be positive.
+#' @param components Logical, default `FALSE`. If `TRUE`, return a one-row
+#'   data.frame with `s`, `numerator`, and `denominator` instead of a single
+#'   number. The numerator is `2 * (f_T - f_0)` and the denominator is
+#'   `dt * sum(f_t * (1 - f_t))`, so `s = numerator / denominator`. To pool
+#'   estimates across variants, sum the numerators and denominators and
+#'   divide; do not average `s` unless an unweighted mean is intended.
 #'
 #' @details
 #' The estimator is
@@ -35,7 +41,9 @@
 #' haploid selection coefficient; divide the result by 2.
 #'
 #' @return A single numeric value: the estimated selection coefficient per
-#'   generation on the scale of [fitfreq()] and [WF_sel()].
+#'   generation on the scale of [fitfreq()] and [WF_sel()]. If
+#'   `components = TRUE`, a one-row data.frame with columns `s`,
+#'   `numerator`, and `denominator`.
 #' @references
 #' Mathieson I, McVean G (2013). Estimating selection coefficients in
 #' spatially structured populations from time series data of allele
@@ -47,7 +55,8 @@
 #' @examples
 #' wright_s_estim(c(0.5, 0.51, 0.52))
 #' wright_s_estim(c(0.5, 0.51, 0.52), dt = 10)
-wright_s_estim <- function(x, dt = 1) {
+#' wright_s_estim(c(0.5, 0.51, 0.52), components = TRUE)
+wright_s_estim <- function(x, dt = 1, components = FALSE) {
   if (!is.numeric(x) || !is.null(dim(x))) {
     stop("'x' must be a numeric vector.")
   }
@@ -67,12 +76,25 @@ wright_s_estim <- function(x, dt = 1) {
         !is.finite(dt) || dt <= 0) {
     stop("'dt' must be a single positive number.")
   }
+  if (!is.logical(components) || length(components) != 1L ||
+        is.na(components)) {
+    stop("'components' must be a single TRUE or FALSE.")
+  }
 
   f_noT <- x[-length(x)]
-  s <- 2 * (x[length(x)] - x[1]) / (dt * sum(f_noT * (1 - f_noT)))
+  numerator <- 2 * (x[length(x)] - x[1])
+  denominator <- dt * sum(f_noT * (1 - f_noT))
+  s <- numerator / denominator
   if (abs(s) >= 1) {
     warning("Estimated |s| >= 1; the first-order approximation may be unreliable.",
             call. = FALSE)
+  }
+  if (components) {
+    return(data.frame(
+      s = s,
+      numerator = numerator,
+      denominator = denominator
+    ))
   }
   s
 }

@@ -28,6 +28,25 @@ test_that("wright_s_estim matches the fitfreq selection coefficient scale", {
   expect_equal(wright_s_estim(q), 0.01, tolerance = 1e-2)
 })
 
+test_that("wright_s_estim reports numerator and denominator on request", {
+  res <- wright_s_estim(c(0.5, 0.51, 0.52), components = TRUE)
+
+  expect_s3_class(res, "data.frame")
+  expect_equal(nrow(res), 1L)
+  expect_named(res, c("s", "numerator", "denominator"))
+  expect_equal(res$numerator, 2 * (0.52 - 0.5))
+  expect_equal(
+    res$denominator,
+    sum(c(0.5, 0.51) * (1 - c(0.5, 0.51)))
+  )
+  expect_equal(res$s, res$numerator / res$denominator)
+  expect_equal(res$s, wright_s_estim(c(0.5, 0.51, 0.52)))
+
+  res_dt <- wright_s_estim(c(0.5, 0.51, 0.52), dt = 10, components = TRUE)
+  expect_equal(res_dt$denominator, 10 * res$denominator)
+  expect_equal(res_dt$s, res$s / 10)
+})
+
 test_that("wright_s_estim accounts for generations between samples", {
   q <- numeric(50)
   q[1] <- 0.1
@@ -40,6 +59,12 @@ test_that("wright_s_estim accounts for generations between samples", {
 
 test_that("wright_s_estim warns outside the small-s approximation", {
   expect_warning(wright_s_estim(c(0.1, 0.2)), "unreliable")
+})
+
+test_that("wright_s_estim returns a scalar by default", {
+  res <- wright_s_estim(c(0.5, 0.51))
+  expect_type(res, "double")
+  expect_length(res, 1L)
 })
 
 test_that("wright_s_estim validates its inputs", {
@@ -55,6 +80,12 @@ test_that("wright_s_estim validates its inputs", {
   expect_error(wright_s_estim(c(0.5, 0.6), dt = c(1, 2)), "positive")
   expect_error(wright_s_estim(c(0.5, 0.6), dt = NA), "positive")
   expect_error(wright_s_estim(c(0.5, 0.6), dt = "1"), "positive")
+  expect_error(wright_s_estim(c(0.5, 0.6), components = NA), "TRUE or FALSE")
+  expect_error(wright_s_estim(c(0.5, 0.6), components = "yes"), "TRUE or FALSE")
+  expect_error(
+    wright_s_estim(c(0.5, 0.6), components = c(TRUE, FALSE)),
+    "TRUE or FALSE"
+  )
 })
 
 test_that("wright_s_estim is exported", {

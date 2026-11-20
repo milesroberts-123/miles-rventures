@@ -4,7 +4,7 @@
 \alias{wright_s_estim}
 \title{Estimate the selection coefficient from an allele-frequency time series}
 \usage{
-wright_s_estim(x, dt = 1)
+wright_s_estim(x, dt = 1, components = FALSE)
 }
 \arguments{
 \item{x}{Numeric vector of allele frequencies of the selected allele,
@@ -13,10 +13,19 @@ strictly between 0 and 1, with no missing values.}
 
 \item{dt}{Number of generations between consecutive entries of \code{x},
 default \code{1}. Must be positive.}
+
+\item{components}{Logical, default \code{FALSE}. If \code{TRUE}, return a one-row
+data.frame with \code{s}, \code{numerator}, and \code{denominator} instead of a single
+number. The numerator is \code{2 * (f_T - f_0)} and the denominator is
+\code{dt * sum(f_t * (1 - f_t))}, so \code{s = numerator / denominator}. To pool
+estimates across variants, sum the numerators and denominators and
+divide; do not average \code{s} unless an unweighted mean is intended.}
 }
 \value{
 A single numeric value: the estimated selection coefficient per
-generation on the scale of \code{\link[=fitfreq]{fitfreq()}} and \code{\link[=WF_sel]{WF_sel()}}.
+generation on the scale of \code{\link[=fitfreq]{fitfreq()}} and \code{\link[=WF_sel]{WF_sel()}}. If
+\code{components = TRUE}, a one-row data.frame with columns \code{s},
+\code{numerator}, and \code{denominator}.
 }
 \description{
 Implements the first-order approximation to the maximum-likelihood
@@ -50,6 +59,7 @@ haploid selection coefficient; divide the result by 2.
 \examples{
 wright_s_estim(c(0.5, 0.51, 0.52))
 wright_s_estim(c(0.5, 0.51, 0.52), dt = 10)
+wright_s_estim(c(0.5, 0.51, 0.52), components = TRUE)
 }
 \references{
 Mathieson I, McVean G (2013). Estimating selection coefficients in
